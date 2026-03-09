@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * TeamDX - Create 20 test leads
+ * TeamDX - Create test leads
  *
  * Usage:
- *   node scripts/seed-test-leads.mjs [assignedTo]
+ *   node scripts/seed-test-leads.mjs [assignedTo] [count] [start]
  *   assignedTo = email to assign leads to (default: telecaller@teamdx.com)
+ *   count = number of leads to create (default: 40)
+ *   start = start index in list (default: 0)
  *
  * Required: SUPABASE_SERVICE_ROLE_KEY in .env.local
  */
@@ -68,7 +70,30 @@ const TEST_LEADS = [
   { source: "Website", name: "Neha Agarwal", place: "Kanpur", number: "9876543227" },
   { source: "Referral", name: "Ravi Malhotra", place: "Chandigarh", number: "9876543228" },
   { source: "Website", name: "Divya Kapoor", place: "Ludhiana", number: "9876543229" },
+  { source: "Website", name: "Sunita Nanda", place: "Bhopal", number: "9876543230" },
+  { source: "Referral", name: "Gopal Tiwari", place: "Patna", number: "9876543231" },
+  { source: "Website", name: "Rekha Saxena", place: "Raipur", number: "9876543232" },
+  { source: "Referral", name: "Mukesh Yadav", place: "Ranchi", number: "9876543233" },
+  { source: "Website", name: "Shalini Dubey", place: "Allahabad", number: "9876543234" },
+  { source: "Referral", name: "Anil Mishra", place: "Dehradun", number: "9876543235" },
+  { source: "Website", name: "Preeti Choudhury", place: "Guwahati", number: "9876543236" },
+  { source: "Referral", name: "Vijay Thakur", place: "Shimla", number: "9876543237" },
+  { source: "Website", name: "Sunil Bansal", place: "Bhubaneswar", number: "9876543238" },
+  { source: "Referral", name: "Ritu Goyal", place: "Srinagar", number: "9876543239" },
+  { source: "Website", name: "Naveen Chopra", place: "Amritsar", number: "9876543240" },
+  { source: "Referral", name: "Pallavi Sinha", place: "Mysore", number: "9876543241" },
+  { source: "Website", name: "Kunal Oberoi", place: "Jodhpur", number: "9876543242" },
+  { source: "Referral", name: "Swati Rastogi", place: "Udaipur", number: "9876543243" },
+  { source: "Website", name: "Rohit Bhatia", place: "Vadodara", number: "9876543244" },
+  { source: "Referral", name: "Anjali Tandon", place: "Rajkot", number: "9876543245" },
+  { source: "Website", name: "Sachin Arora", place: "Bareilly", number: "9876543246" },
+  { source: "Referral", name: "Monika Sethi", place: "Moradabad", number: "9876543247" },
+  { source: "Website", name: "Tarun Varma", place: "Gwalior", number: "9876543248" },
+  { source: "Referral", name: "Ishita Khanna", place: "Cuttack", number: "9876543249" },
 ];
+
+const count = Math.min(parseInt(process.argv[3], 10) || 40, TEST_LEADS.length);
+const start = Math.max(0, parseInt(process.argv[4], 10) || 0);
 
 const env = loadEnv();
 const url = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -84,9 +109,10 @@ const supabase = createClient(url, serviceKey, {
 });
 
 async function main() {
-  console.log(`Creating 20 test leads (assigned to: ${assignedTo})...`);
+  const leadsToUse = TEST_LEADS.slice(start, start + count);
+  console.log(`Creating ${leadsToUse.length} test leads (assigned to: ${assignedTo})...`);
 
-  const rows = TEST_LEADS.map((l) => ({
+  const rows = leadsToUse.map((l) => ({
     source: l.source,
     name: l.name,
     place: l.place,
