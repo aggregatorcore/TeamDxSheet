@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-app-mono), ui-monospace, monospace;
+}
+
+body {
+  background: #fafafa;
+  color: #171717;
+  font-family: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Ensure inputs and selects have visible text */
+input, select, textarea {
+  color: #171717;
+}
+
+/* Callback blink animation - 30 sec before callback time */
+@keyframes callback-blink {
+  0%, 100% { background-color: rgb(254 249 195); }
+  50% { background-color: rgb(253 224 71); }
+}
+
+.animate-callback-blink {
+  animation: callback-blink 1s ease-in-out infinite;
+}
+
+/* Exhaust move animation */
+@keyframes exhaust-blink {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(239 68 68); }
+  50% { box-shadow: 0 0 0 4px rgb(220 38 38); }
+}
+
+.animate-exhaust-blink {
+  animation: exhaust-blink 0.6s ease-in-out 3;
+}
+
+@keyframes exhaust-slide-out {
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.animate-exhaust-slide-out {
+  animation: exhaust-slide-out 1.2s ease-out forwards;
+}
+
+/* Review row: slides LEFT (opposite of exhaust) */
+@keyframes review-slide-out {
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-review-slide-out {
+  animation: review-slide-out 1.2s ease-out forwards;
+}
+
+@keyframes review-blink {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(245 158 11); }
+  50% { box-shadow: 0 0 0 4px rgb(217 119 6); }
+}
+
+.animate-review-blink {
+  animation: review-blink 0.6s ease-in-out 3;
+}
+
+@keyframes exhaust-lead-box-move {
+  to {
+    transform: translate(var(--exhaust-dx), var(--exhaust-dy)) scale(0.8);
+    opacity: 0.5;
+  }
+}
+
+.animate-exhaust-lead-box {
+  animation: exhaust-lead-box-move 3s ease-in-out forwards;
+}
+
+/* Center layout: lead moves right toward exhaust, then hides */
+@keyframes exhaust-lead-box-center {
+  to {
+    transform: translateX(200px) scale(0.85);
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.animate-exhaust-lead-box-center {
+  animation: exhaust-lead-box-center 3s ease-in-out forwards;
+}
+
+/* Exhaust bucket hides when lead enters */
+@keyframes exhaust-bucket-hide {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.animate-exhaust-bucket-hide {
+  animation: exhaust-bucket-hide 3s ease-out forwards;
+}
+
+@keyframes exhaust-arrow-flow {
+  0%, 100% { opacity: 0.3; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(8px); }
+}
+
+.animate-exhaust-arrow {
+  animation: exhaust-arrow-flow 0.6s ease-in-out infinite;
+}
+
+/* Review animation - lead moves RIGHT to LEFT */
+@keyframes review-lead-box-center {
+  to {
+    transform: translateX(-200px) scale(0.85);
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.animate-review-lead-box-center {
+  animation: review-lead-box-center 3s ease-in-out forwards;
+}
+
+@keyframes review-bucket-hide {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.animate-review-bucket-hide {
+  animation: review-bucket-hide 3s ease-out forwards;
+}
+
+@keyframes review-arrow-flow {
+  0%, 100% { opacity: 0.3; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(-8px); }
+}
+
+.animate-review-arrow {
+  animation: review-arrow-flow 0.6s ease-in-out infinite;
+}
+
+/* Green bucket animation - lead moves BOTTOM to UP */
+@keyframes green-blink {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(52 211 153); }
+  50% { box-shadow: 0 0 0 4px rgb(34 197 94); }
+}
+
+.animate-green-blink {
+  animation: green-blink 0.6s ease-in-out 3;
+}
+
+@keyframes green-slide-out {
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-green-slide-out {
+  animation: green-slide-out 1.2s ease-out forwards;
+}
+
+@keyframes green-lead-box-center {
+  to {
+    transform: translateY(-200px) scale(0.85);
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.animate-green-lead-box-center {
+  animation: green-lead-box-center 3s ease-in-out forwards;
+}
+
+@keyframes green-bucket-hide {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.animate-green-bucket-hide {
+  animation: green-bucket-hide 3s ease-out forwards;
+}
+
+@keyframes green-arrow-flow {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-8px); }
+}
+
+.animate-green-arrow {
+  animation: green-arrow-flow 0.6s ease-in-out infinite;
+}
+
+/* Hide scrollbar but keep scrollbar-gutter space for table header alignment */
+.table-header-scroll {
+  scrollbar-width: none;
+}
+.table-header-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

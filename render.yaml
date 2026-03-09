@@ -1,0 +1,24 @@
+# TeamDX Lead Manager - Render Blueprint
+# https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: teamdx-lead-manager
+    runtime: node
+
+    # Root directory (webapp folder contains Next.js app)
+    rootDir: webapp
+
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+
+    # Required environment variables - add values in Render Dashboard
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
