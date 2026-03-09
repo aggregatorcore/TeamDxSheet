@@ -54,6 +54,7 @@ export function WhatsAppLinkModal({ onClose }: WhatsAppLinkModalProps) {
         >
           Close
         </button>
+        </div>
       </div>
     </div>
   );
