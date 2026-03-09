@@ -236,7 +236,7 @@ export function CallNowModal({
                   <button
                     key={t}
                     type="button"
-                    onClick={() => handleConnectedChoice(t)}
+                    onClick={() => handleConnectedChoice(t as "Interested" | "Not Interested")}
                     className={`flex-1 rounded-lg px-4 py-2.5 font-medium ${
                       t === "Interested"
                         ? "bg-emerald-600 text-white hover:bg-emerald-700"
