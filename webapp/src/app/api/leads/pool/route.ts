@@ -8,7 +8,7 @@ async function isAdmin(userId: string): Promise<boolean> {
   return data?.role === "admin";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const {
@@ -23,13 +23,30 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden - Admin only" }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const assigned = searchParams.get("assigned") === "true";
+
     const adminClient = createAdminClient();
+    const maxRows = 50000;
+
+    if (assigned) {
+      const { data, error } = await adminClient
+        .from("leads")
+        .select("id, source, name, number, assigned_to")
+        .neq("assigned_to", "pool")
+        .order("updated_at", { ascending: false })
+        .range(0, maxRows - 1);
+      if (error) throw error;
+      return NextResponse.json(data ?? []);
+    }
+
     const { data, error } = await adminClient
       .from("leads")
       .select("id, source, name, number")
       .eq("assigned_to", "pool")
       .eq("is_invalid", false)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(0, maxRows - 1);
 
     if (error) throw error;
     return NextResponse.json(data ?? []);

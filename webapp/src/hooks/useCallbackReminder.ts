@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import type { Lead } from "@/types/lead";
+import { useToast } from "@/hooks/useToast";
 
 const POLL_INTERVAL_MS = 60 * 1000;
-const GRACE_MS = 2 * 60 * 60 * 1000;
 
 export function useCallbackReminder(leads: Lead[]) {
   const alertedRef = useRef<Set<string>>(new Set());
+  const { showToast } = useToast();
 
   useEffect(() => {
     const checkCallbacks = () => {
@@ -18,23 +19,19 @@ export function useCallbackReminder(leads: Lead[]) {
         const key = `${lead.id}-${lead.rowIndex}`;
         if (cb <= now && !alertedRef.current.has(key)) {
           alertedRef.current.add(key);
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("Call karo!", {
-              body: `${lead.name} - ${lead.number}`,
-            });
-          }
+          showToast({
+            type: "info",
+            title: "Callback due",
+            message: `${lead.name || "Lead"} – ${lead.number}`,
+          });
         }
       }
     };
 
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-
     checkCallbacks();
     const id = setInterval(checkCallbacks, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [leads]);
+  }, [leads, showToast]);
 }
 
 export function useOverdueCheck(leads: Lead[]) {
@@ -52,3 +49,4 @@ export function useOverdueCheck(leads: Lead[]) {
     return () => clearInterval(id);
   }, [leads]);
 }
+

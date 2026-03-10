@@ -6,7 +6,7 @@
     "dev": "npx next dev",
     "build": "npx next build",
     "start": "npx next start",
-    "lint": "eslint",
+    "lint": "next lint",
     "create-user": "node scripts/create-user.mjs",
     "migrate": "node scripts/run-migrations.mjs",
     "seed-leads": "node scripts/seed-test-leads.mjs"

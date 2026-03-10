@@ -6,10 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { LeadTable } from "@/components/LeadTable";
 import { GreenBucketTable } from "@/components/GreenBucketTable";
 import { AdminLeadsTable } from "@/components/AdminLeadsTable";
+import { LiveSheetTable } from "@/components/LiveSheetTable";
 import { CallbackReminder } from "@/components/CallbackReminder";
 import type { Lead } from "@/types/lead";
 
-type ViewMode = "leads" | "green" | "exhaust" | "review";
+type ViewMode = "leads" | "green" | "exhaust" | "review" | "live";
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -62,7 +63,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const v = searchParams.get("view") as ViewMode | null;
-    if (v === "green" || v === "exhaust" || v === "review" || v === "leads") setView(v);
+    setView((v === "green" || v === "exhaust" || v === "review" || v === "live" || v === "leads") ? v : "leads");
   }, [searchParams]);
 
   useEffect(() => {
@@ -203,6 +204,8 @@ export default function DashboardPage() {
               onRefresh={fetchAdminData}
             />
           )
+        ) : view === "live" && isAdmin ? (
+          <LiveSheetTable />
         ) : null}
       </div>
 

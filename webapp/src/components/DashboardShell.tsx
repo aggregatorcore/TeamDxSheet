@@ -19,6 +19,7 @@ export function DashboardShell({ children, isAdmin }: DashboardShellProps) {
         ? "leads-mgmt"
         : searchParams.get("view") || "leads";
   const isBucketsView = view === "green" || view === "exhaust" || view === "review";
+  const isLiveView = view === "live";
 
   const handleLogout = async () => {
     const { createClient } = await import("@/lib/supabase/client");
@@ -69,6 +70,14 @@ export function DashboardShell({ children, isAdmin }: DashboardShellProps) {
               >
                 Buckets
               </Link>
+              {isAdmin && (
+                <Link
+                  href="/dashboard?view=live"
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-200 ${navClass("live")}`}
+                >
+                  Live
+                </Link>
+              )}
               {isAdmin && (
                 <Link
                   href="/dashboard/create-user"

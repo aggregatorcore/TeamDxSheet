@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/hooks/useToast";
 
 type Tab = "upload" | "distribute" | "advance";
 
@@ -43,13 +44,21 @@ export default function LeadsManagementPage() {
   const [fetchingSheet, setFetchingSheet] = useState(false);
   const [uploadSource, setUploadSource] = useState<"csv" | "sheet" | null>(null);
   const [poolLeads, setPoolLeads] = useState<{ id: string; source: string; name: string; number: string }[]>([]);
+  const [assignedLeads, setAssignedLeads] = useState<{ id: string; source: string; name: string; number: string; assigned_to: string }[]>([]);
+  const [poolCount, setPoolCount] = useState(0);
+  const [assignedCount, setAssignedCount] = useState(0);
+  const [distributeView, setDistributeView] = useState<"pool" | "assigned">("pool");
   const [distributeSelected, setDistributeSelected] = useState<string[]>([]);
   const [distributing, setDistributing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignMethod, setAssignMethod] = useState<"round-robin" | "direct">("round-robin");
   const [directAssignUser, setDirectAssignUser] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+  const { showToast } = useToast();
 
   useEffect(() => {
     const init = async () => {
@@ -82,14 +91,45 @@ export default function LeadsManagementPage() {
     init();
   }, [router]);
 
+  const fetchPoolCounts = () => {
+    fetch("/api/leads/pool/counts")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data.pool === "number" && typeof data.assigned === "number") {
+          setPoolCount(data.pool);
+          setAssignedCount(data.assigned);
+        }
+      })
+      .catch(() => {});
+  };
+  const fetchPoolLeads = () => {
+    fetch("/api/leads/pool")
+      .then((r) => r.json())
+      .then((data) => setPoolLeads(Array.isArray(data) ? data : []))
+      .catch(() => setPoolLeads([]));
+  };
+  const fetchAssignedLeads = () => {
+    fetch("/api/leads/pool?assigned=true")
+      .then((r) => r.json())
+      .then((data) => setAssignedLeads(Array.isArray(data) ? data : []))
+      .catch(() => setAssignedLeads([]));
+  };
+
   useEffect(() => {
     if (isAdmin && tab === "distribute") {
-      fetch("/api/leads/pool")
-        .then((r) => r.json())
-        .then((data) => setPoolLeads(Array.isArray(data) ? data : []))
-        .catch(() => setPoolLeads([]));
+      fetchPoolCounts();
+      fetchPoolLeads();
+      fetchAssignedLeads();
     }
   }, [isAdmin, tab]);
+
+  useEffect(() => {
+    const el = selectAllCheckboxRef.current;
+    if (!el) return;
+    const n = poolLeads.length;
+    const s = distributeSelected.length;
+    el.indeterminate = n > 0 && s > 0 && s < n;
+  }, [poolLeads.length, distributeSelected.length]);
 
   const parseCsv = (text: string): ParsedLead[] => {
     const lines = text.trim().split(/\r?\n/).filter(Boolean);
@@ -295,15 +335,27 @@ export default function LeadsManagementPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        const assignedIds = new Set(distributeSelected);
         setDistributeSelected([]);
-        setPoolLeads((prev) => prev.filter((l) => !distributeSelected.includes(l.id)));
         setShowAssignModal(false);
         setDirectAssignUser("");
+        setPoolLeads((prev) => prev.filter((l) => !assignedIds.has(l.id)));
+        fetchPoolCounts();
+        fetchPoolLeads();
+        fetchAssignedLeads();
       } else {
-        alert(data?.error ?? "Distribution failed");
+        showToast({
+          type: "error",
+          title: "Distribution failed",
+          message: data?.error ?? "Could not assign leads. Please try again.",
+        });
       }
     } catch {
-      alert("Distribution failed");
+      showToast({
+        type: "error",
+        title: "Distribution failed",
+        message: "Could not assign leads. Please try again.",
+      });
     } finally {
       setDistributing(false);
     }
@@ -319,6 +371,93 @@ export default function LeadsManagementPage() {
     setDistributeSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  const handleDeletePoolLeads = async () => {
+    const count = distributeSelected.length;
+    if (count === 0) return;
+    if (!confirm(`Delete ${count} lead(s) from pool? This cannot be undone.`)) return;
+    setDeleting(true);
+    let failed = 0;
+    try {
+      for (const id of distributeSelected) {
+        const res = await fetch(`/api/leads?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!res.ok) failed += 1;
+      }
+        setDistributeSelected([]);
+        fetchPoolCounts();
+        fetchPoolLeads();
+      if (failed > 0) {
+        showToast({
+          type: "error",
+          title: "Delete incomplete",
+          message: `${failed} of ${count} lead(s) could not be deleted.`,
+        });
+      } else {
+        showToast({
+          type: "success",
+          title: "Deleted",
+          message: `${count} lead(s) removed from pool.`,
+        });
+      }
+    } catch {
+      showToast({
+        type: "error",
+        title: "Delete failed",
+        message: "Could not delete leads. Please try again.",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteAllLeads = async () => {
+    if (
+      !confirm(
+        "Permanently delete ALL leads from the database? Pool and Assigned – everything will be removed. This cannot be undone.\n\nClick OK to delete."
+      )
+    )
+      return;
+    setDeletingAll(true);
+    try {
+      const res = await fetch("/api/leads/delete-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE_ALL" }),
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setPoolLeads([]);
+        setAssignedLeads([]);
+        setPoolCount(0);
+        setAssignedCount(0);
+        setDistributeSelected([]);
+        fetchPoolCounts();
+        fetchPoolLeads();
+        fetchAssignedLeads();
+        showToast({
+          type: "success",
+          title: "All leads deleted",
+          message: `${data?.deleted ?? 0} lead(s) removed.`,
+        });
+      } else {
+        const msg = data?.error ?? (res.status === 401 ? "Please log in again." : res.status === 403 ? "Admin only." : "Could not delete all leads.");
+        showToast({
+          type: "error",
+          title: "Delete failed",
+          message: msg,
+        });
+      }
+    } catch (e) {
+      showToast({
+        type: "error",
+        title: "Delete failed",
+        message: e instanceof Error ? e.message : "Network or server error. Try again.",
+      });
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const selectAllPool = () => {
@@ -501,72 +640,170 @@ export default function LeadsManagementPage() {
 
         {tab === "distribute" && (
           <div className="space-y-6">
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <h3 className="text-sm font-semibold text-neutral-800">Pool Leads</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(true)}
-                  disabled={distributeSelected.length === 0}
-                  className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Assign ({distributeSelected.length})
-                </button>
-              </div>
-              <p className="mb-3 text-xs text-neutral-500">
-                Select leads, then click Assign to distribute.
-              </p>
-              {poolLeads.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 py-8 text-center text-sm text-neutral-500">
-                  No leads in pool. Upload leads without assigning to add to pool.
-                </p>
-              ) : (
-                <>
-                  <div className="mb-2 flex items-center gap-2">
+            <div className="flex rounded-lg border border-neutral-200 bg-white p-0.5">
+              <button
+                type="button"
+                onClick={() => setDistributeView("pool")}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                  distributeView === "pool"
+                    ? "bg-neutral-900 text-white shadow-sm"
+                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                }`}
+              >
+                Pool ({poolCount ?? poolLeads.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistributeView("assigned")}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                  distributeView === "assigned"
+                    ? "bg-neutral-900 text-white shadow-sm"
+                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                }`}
+              >
+                Assigned ({assignedCount ?? assignedLeads.length})
+              </button>
+            </div>
+
+            {distributeView === "pool" && (
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-4">
+                  <h3 className="text-sm font-semibold text-neutral-800">Pool Leads</h3>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={selectAllPool}
-                      className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                      onClick={handleDeletePoolLeads}
+                      disabled={distributeSelected.length === 0 || deleting}
+                      className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {distributeSelected.length === poolLeads.length ? "Deselect all" : "Select all"}
+                      {deleting ? "Deleting…" : "Delete"}
+                      {distributeSelected.length > 0 && !deleting ? ` (${distributeSelected.length})` : ""}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignModal(true)}
+                      disabled={distributeSelected.length === 0}
+                      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Assign ({distributeSelected.length})
                     </button>
                   </div>
-                  <div className="max-h-64 overflow-auto rounded border border-neutral-200">
+                </div>
+                <p className="mb-3 text-xs text-neutral-500">
+                  Select leads, then click Assign to distribute. Assigned leads move to Assigned.
+                </p>
+                {poolLeads.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 py-8 text-center text-sm text-neutral-500">
+                    No leads in pool. Upload leads without assigning to add to pool.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mb-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={selectAllPool}
+                        className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                      >
+                        {distributeSelected.length === poolLeads.length ? "Deselect all" : "Select all"}
+                      </button>
+                    </div>
+                    <div className="max-h-64 overflow-auto rounded border border-neutral-200">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="sticky top-0 bg-neutral-50">
+                          <tr>
+                            <th className="w-8 px-2 py-2">
+                              <input
+                                ref={selectAllCheckboxRef}
+                                type="checkbox"
+                                checked={poolLeads.length > 0 && distributeSelected.length === poolLeads.length}
+                                onChange={selectAllPool}
+                                className="rounded"
+                                title={distributeSelected.length === poolLeads.length ? "Deselect all" : "Select all"}
+                              />
+                            </th>
+                            <th className="px-3 py-2 font-medium">Source</th>
+                            <th className="px-3 py-2 font-medium">Name</th>
+                            <th className="px-3 py-2 font-medium">Number</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {poolLeads.map((l) => (
+                            <tr
+                              key={l.id}
+                              className={`border-t border-neutral-100 ${distributeSelected.includes(l.id) ? "bg-blue-50" : ""}`}
+                            >
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={distributeSelected.includes(l.id)}
+                                  onChange={() => toggleDistributeLead(l.id)}
+                                  className="rounded"
+                                />
+                              </td>
+                              <td className="px-3 py-1.5">{l.source}</td>
+                              <td className="px-3 py-1.5">{l.name}</td>
+                              <td className="px-3 py-1.5">{l.number}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {distributeView === "assigned" && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-neutral-800">Assigned Leads</h3>
+                <p className="mb-3 text-xs text-neutral-500">
+                  Leads that have been assigned from pool. New uploads go to Pool.
+                </p>
+                {assignedLeads.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 py-8 text-center text-sm text-neutral-500">
+                    No assigned leads yet. Assign from Pool to see them here.
+                  </p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded border border-neutral-200">
                     <table className="min-w-full text-left text-sm">
-                      <thead className="sticky top-0 bg-neutral-50">
+                      <thead className="sticky top-0 bg-neutral-100">
                         <tr>
-                          <th className="w-8 px-2 py-2" />
-                          <th className="px-3 py-2 font-medium">Source</th>
-                          <th className="px-3 py-2 font-medium">Name</th>
-                          <th className="px-3 py-2 font-medium">Number</th>
+                          <th className="border-b border-neutral-200 px-3 py-2 font-medium">Source</th>
+                          <th className="border-b border-neutral-200 px-3 py-2 font-medium">Name</th>
+                          <th className="border-b border-neutral-200 px-3 py-2 font-medium">Number</th>
+                          <th className="border-b border-neutral-200 px-3 py-2 font-medium">Assigned To</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {poolLeads.map((l) => (
-                          <tr
-                            key={l.id}
-                            className={`border-t border-neutral-100 ${distributeSelected.includes(l.id) ? "bg-blue-50" : ""}`}
-                          >
-                            <td className="px-2 py-1.5">
-                              <input
-                                type="checkbox"
-                                checked={distributeSelected.includes(l.id)}
-                                onChange={() => toggleDistributeLead(l.id)}
-                                className="rounded"
-                              />
-                            </td>
+                        {assignedLeads.map((l) => (
+                          <tr key={l.id} className="border-t border-neutral-100">
                             <td className="px-3 py-1.5">{l.source}</td>
                             <td className="px-3 py-1.5">{l.name}</td>
                             <td className="px-3 py-1.5">{l.number}</td>
+                            <td className="px-3 py-1.5 font-medium text-neutral-700">{l.assigned_to}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
+            <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
+              <h3 className="mb-1 text-sm font-semibold text-red-800">Danger zone</h3>
+              <p className="mb-3 text-xs text-red-700">
+                Permanently delete all leads (Pool + Assigned). This cannot be undone.
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteAllLeads}
+                disabled={deletingAll}
+                className="rounded-lg border border-red-400 bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingAll ? "Deleting…" : "Delete all leads"}
+              </button>
+            </div>
           </div>
         )}
 

@@ -1,16 +1,14 @@
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAndUserFromRequest } from "@/lib/supabase/apiAuth";
 import { scheduleCallback } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.email) {
+    const auth = await getSupabaseAndUserFromRequest(request);
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { supabase, user } = auth;
 
     const body = await request.json();
     const { id, callbackTime } = body;
@@ -22,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await scheduleCallback(id, callbackTime, user.email);
+    await scheduleCallback(id, callbackTime, user.email, supabase);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);

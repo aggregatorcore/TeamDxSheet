@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
+import { useToast } from "@/hooks/useToast";
 import type { Lead } from "@/types/lead";
 
 interface AdminLeadsTableProps {
@@ -10,11 +11,32 @@ interface AdminLeadsTableProps {
   onRefresh: () => void;
 }
 
-const colWidths = ["8%", "10%", "14%", "12%", "14%", "16%", "16%", "10%"];
+const colWidths = ["8%", "10%", "14%", "12%", "14%", "16%", "14%", "14%"];
 
 export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTableProps) {
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const [modalTab, setModalTab] = useState<"overview" | "timeline" | "documents">("timeline");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  const handleDelete = async (lead: Lead) => {
+    if (!confirm(`Delete lead "${lead.name}" (${lead.id.slice(0, 8)}) permanently? This cannot be undone.`)) return;
+    setDeletingId(lead.id);
+    try {
+      const res = await fetch(`/api/leads?id=${encodeURIComponent(lead.id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Delete failed");
+      }
+      showToast("Lead deleted", "success");
+      if (detailLead?.id === lead.id) setDetailLead(null);
+      onRefresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to delete lead", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const openModal = (lead: Lead, tab: "overview" | "timeline" | "documents" = "timeline") => {
     setDetailLead(lead);
@@ -111,13 +133,24 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
                   </span>
                 </td>
                 <td className={`overflow-hidden border-r-2 ${borderColor} px-2 py-1.5`}>
-                  <button
-                    type="button"
-                    onClick={() => openModal(lead, "timeline")}
-                    className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700"
-                  >
-                    Action
-                  </button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openModal(lead, "timeline")}
+                      className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+                    >
+                      Action
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(lead)}
+                      disabled={deletingId === lead.id}
+                      className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                      title="Delete lead permanently"
+                    >
+                      {deletingId === lead.id ? "…" : "Delete"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
