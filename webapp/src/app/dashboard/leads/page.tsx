@@ -27,7 +27,7 @@ export default function LeadsManagementPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState<Tab>("upload");
   const [users, setUsers] = useState<UserOption[]>([]);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [, setCsvFile] = useState<File | null>(null);
   const [parsedLeads, setParsedLeads] = useState<ParsedLead[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [selectedUserEmails, setSelectedUserEmails] = useState<string[]>([]);

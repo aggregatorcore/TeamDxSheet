@@ -14,7 +14,7 @@ export default function CreateUserPage() {
   const [success, setSuccess] = useState(false);
   const [createdEmail, setCreatedEmail] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<{ id: string; email: string; full_name: string | null; role: string; status: "active" | "exited" }[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editUser, setEditUser] = useState<{ id: string; email: string; full_name: string | null; role: string } | null>(null);

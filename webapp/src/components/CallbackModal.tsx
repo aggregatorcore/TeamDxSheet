@@ -43,6 +43,8 @@ export function CallbackModal({
   onClose,
   onSuccess,
 }: CallbackModalProps) {
+  void leadId;
+  void leadNumber;
   const [date, setDate] = useState(() => {
     const d = new Date(Date.now() + 30 * 60 * 1000);
     return formatDateForInput(d);

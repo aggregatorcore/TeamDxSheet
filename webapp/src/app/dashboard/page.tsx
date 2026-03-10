@@ -86,14 +86,17 @@ export default function DashboardPage() {
       setLoading(false);
     };
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchLeads stable, init on mount only
   }, [router]);
 
   useEffect(() => {
     if (view === "green") fetchGreenLeads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchGreenLeads stable, run on view change
   }, [view]);
 
   useEffect(() => {
     if ((view === "exhaust" || view === "review") && isAdmin) fetchAdminData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchAdminData stable, run on view/isAdmin
   }, [view, isAdmin]);
 
   const setViewWithUrl = (v: ViewMode) => {

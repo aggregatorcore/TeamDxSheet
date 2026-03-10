@@ -19,7 +19,6 @@ export function DashboardShell({ children, isAdmin }: DashboardShellProps) {
         ? "leads-mgmt"
         : searchParams.get("view") || "leads";
   const isBucketsView = view === "green" || view === "exhaust" || view === "review";
-  const isLiveView = view === "live";
 
   const handleLogout = async () => {
     const { createClient } = await import("@/lib/supabase/client");

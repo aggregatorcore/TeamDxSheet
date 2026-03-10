@@ -12,6 +12,7 @@ interface GreenBucketTableProps {
 const colWidths = ["10%", "10%", "14%", "12%", "14%", "20%", "20%"];
 
 export function GreenBucketTable({ leads, onRefresh }: GreenBucketTableProps) {
+  void onRefresh;
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
 

@@ -101,7 +101,8 @@ export async function updateLead(
   if (error) throw error;
 }
 
-export async function markLeadInvalid(id: string, _userEmail: string): Promise<void> {
+export async function markLeadInvalid(id: string, _userEmail?: string): Promise<void> {
+  void _userEmail;
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("leads")
@@ -114,8 +115,9 @@ export async function markLeadForReview(
   id: string,
   tags: string,
   note: string,
-  _userEmail: string
+  _userEmail?: string
 ): Promise<void> {
+  void _userEmail;
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("leads")

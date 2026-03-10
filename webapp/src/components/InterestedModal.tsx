@@ -57,6 +57,7 @@ export function InterestedModal({
   onClose,
   onConfirm,
 }: InterestedModalProps) {
+  void leadNumber;
   const [loading, setLoading] = useState(false);
   const [passport, setPassport] = useState<"yes" | "no" | "">("");
   const [error, setError] = useState<string | null>(null);
