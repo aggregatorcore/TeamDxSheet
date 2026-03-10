@@ -28,11 +28,11 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error ?? "Delete failed");
       }
-      showToast("Lead deleted", "success");
+      showToast({ message: "Lead deleted", type: "success" });
       if (detailLead?.id === lead.id) setDetailLead(null);
       onRefresh();
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to delete lead", "error");
+      showToast({ message: e instanceof Error ? e.message : "Failed to delete lead", type: "error" });
     } finally {
       setDeletingId(null);
     }
