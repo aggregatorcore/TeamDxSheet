@@ -31,6 +31,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { supabase, user } = auth;
+    const userEmail = user.email;
+    if (!userEmail) {
+      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const admin = searchParams.get("admin") === "true";
@@ -68,11 +72,11 @@ export async function GET(request: Request) {
       return NextResponse.json(leads);
     }
     if (green) {
-      const leads = await getGreenBucketLeads(user.email, supabase);
+      const leads = await getGreenBucketLeads(userEmail, supabase);
       return NextResponse.json(leads);
     }
 
-    const leads = await getLeadsForUser(user.email, supabase);
+    const leads = await getLeadsForUser(userEmail, supabase);
     return NextResponse.json(leads);
   } catch (err) {
     console.error(err);
@@ -90,13 +94,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { supabase, user } = auth;
+    const userEmail = user.email;
+    if (!userEmail) {
+      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    }
 
     const userIsAdmin = await isAdmin(user.id, supabase);
     const body = await request.json();
     const { source, name, place, number, assignedTo } = body;
 
     // Only admins can assign leads to others; telecallers always get their own email
-    const assigned_to = userIsAdmin ? (assignedTo ?? user.email) : user.email;
+    const assigned_to = userIsAdmin ? (assignedTo ?? userEmail) : userEmail;
 
     const { data, error } = await supabase
       .from("leads")
@@ -131,6 +139,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { supabase, user } = auth;
+    const userEmail = user.email;
+    if (!userEmail) {
+      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    }
 
     const body = await request.json();
     const { id, flow, tags, note, category, moveToAdmin, moveToAdminWithTag, moveToReview, moveToGreenBucket } = body;
@@ -142,7 +154,7 @@ export async function PATCH(request: Request) {
     };
 
     if (moveToGreenBucket && id && note) {
-      await markLeadDocumentReceived(id, note, user.email, supabase);
+      await markLeadDocumentReceived(id, note, userEmail, supabase);
       return NextResponse.json({ ok: true });
     }
 
@@ -150,7 +162,7 @@ export async function PATCH(request: Request) {
       if (!(await verifyOwnership(id))) {
         return NextResponse.json({ error: "Forbidden - Lead not assigned to you" }, { status: 403 });
       }
-      await markLeadInvalid(id, user.email);
+      await markLeadInvalid(id, userEmail);
       return NextResponse.json({ ok: true });
     }
 
@@ -158,7 +170,7 @@ export async function PATCH(request: Request) {
       if (!(await verifyOwnership(id))) {
         return NextResponse.json({ error: "Forbidden - Lead not assigned to you" }, { status: 403 });
       }
-      await markLeadForReview(id, tags, note, user.email);
+      await markLeadForReview(id, tags, note, userEmail);
       return NextResponse.json({ ok: true });
     }
 
@@ -166,7 +178,7 @@ export async function PATCH(request: Request) {
       if (!(await verifyOwnership(id))) {
         return NextResponse.json({ error: "Forbidden - Lead not assigned to you" }, { status: 403 });
       }
-      await markLeadHiddenForAdmin(id, tags, user.email, body.note);
+      await markLeadHiddenForAdmin(id, tags, userEmail, body.note);
       return NextResponse.json({ ok: true });
     }
 
@@ -187,7 +199,7 @@ export async function PATCH(request: Request) {
     if (body.whatsappFollowupStartedAt !== undefined)
       updates.whatsappFollowupStartedAt = body.whatsappFollowupStartedAt;
 
-    await updateLead(id, updates as Parameters<typeof updateLead>[1], user.email, supabase);
+    await updateLead(id, updates as Parameters<typeof updateLead>[1], userEmail, supabase);
     return NextResponse.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to update lead";
