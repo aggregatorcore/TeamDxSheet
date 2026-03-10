@@ -20,7 +20,12 @@ export async function POST(request: Request) {
       );
     }
 
-    await scheduleCallback(id, callbackTime, user.email, supabase);
+    const userEmail = user.email;
+    if (!userEmail) {
+      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    }
+
+    await scheduleCallback(id, callbackTime, userEmail, supabase);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);
