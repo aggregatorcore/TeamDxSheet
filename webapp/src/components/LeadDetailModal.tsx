@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import type { Lead, FlowOption } from "@/types/lead";
 import { getTagHistory } from "@/lib/leadNote";
 import { FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
 
 interface LeadDetailModalProps {
   lead: Lead;
   onClose: () => void;
   initialTab?: "overview" | "timeline" | "documents";
+  onUpdate?: (updates: Partial<Lead>) => void;
 }
 
 /** Parse note string into key-value pairs */
@@ -34,8 +36,9 @@ function getAttemptHistory(note: string | undefined): string[] {
 
 /** Keys from lead form (InterestedModal) - exclude from Note section, show in Profile only */
 const FORM_DATA_KEYS = new Set([
-  "Name", "Place", "Email", "Qualification", "Working", "Experience", "Target", "Budget",
-  "Prev travel", "Rejection", "Action", "Passport", "Passport status",
+  "Name", "Place", "Email", "Qualification", "Working", "Experience", "Experience from",
+  "Target", "Visa", "Budget", "Budget from", "Prev travel", "Rejection", "Action",
+  "Passport", "Passport status",
 ]);
 
 /** User-written notes only - exclude form data, Attempt, TagHistory */
@@ -118,30 +121,187 @@ function getTimelineCycles(note: string | undefined, lead: Lead, action: string 
   return cycles.reverse();
 }
 
-function Field({ label, value }: { label: string; value: string | undefined }) {
-  if (!value || value === "-") return null;
+const PLACEHOLDER = "—";
+
+function Field({
+  label,
+  value,
+  placeholder = PLACEHOLDER,
+}: {
+  label: string;
+  value: string | undefined;
+  placeholder?: string;
+}) {
+  const display = value?.trim() && value !== "-" ? value : placeholder;
+  const isEmpty = !value?.trim() || value === "-";
   return (
     <div className="flex gap-2 py-1">
       <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">{label}:</span>
-      <span className="text-base text-slate-900">{value}</span>
+      <span className={`text-base ${isEmpty ? "text-slate-400 italic" : "text-slate-900"}`}>{display}</span>
     </div>
   );
 }
 
-export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: LeadDetailModalProps) {
+/** Parse "Prev travel: X (V, D); Y (V, D)" into entries */
+function parsePrevTravelEntries(str: string | undefined): { country: string; visa: string; duration: string }[] {
+  if (!str?.trim()) return [{ country: "", visa: "", duration: "" }];
+  const segments = str.split(";").map((s) => s.trim()).filter(Boolean);
+  if (segments.length === 0) return [{ country: "", visa: "", duration: "" }];
+  return segments.map((seg) => {
+    const open = seg.indexOf(" (");
+    const country = open >= 0 ? seg.slice(0, open).trim() : seg.trim();
+    const rest = open >= 0 ? seg.slice(open + 2) : "";
+    const close = rest.indexOf(")");
+    const visDur = close >= 0 ? rest.slice(0, close) : rest;
+    const [visa = "", duration = ""] = visDur.split(",").map((s) => s.trim());
+    return { country: country || "", visa: visa || "", duration: duration || "" };
+  });
+}
+
+/** Parse "Rejection: country - reason" into country and reason */
+function parseRejection(str: string | undefined): { country: string; reason: string } {
+  if (!str?.trim()) return { country: "", reason: "" };
+  const dash = str.indexOf(" - ");
+  if (dash < 0) return { country: str.trim(), reason: "" };
+  return { country: str.slice(0, dash).trim(), reason: str.slice(dash + 3).trim() };
+}
+
+/** Build note string from InterestedFormValues, preserving TagHistory */
+function buildNoteFromFormValues(form: InterestedFormValues, existingNote: string | undefined): string {
+  const parts: string[] = [];
+  if (form.name?.trim()) parts.push(`Name: ${form.name.trim()}`);
+  if (form.place?.trim()) parts.push(`Place: ${form.place.trim()}`);
+  if (form.qualification?.trim()) parts.push(`Qualification: ${form.qualification.trim()}`);
+  if (form.nowWorking === "yes" && form.tradeField?.trim()) parts.push(`Working: ${form.tradeField.trim()}`);
+  if (form.workExpFrom?.trim()) parts.push(`Experience from: ${form.workExpFrom.trim()} yrs`);
+  if (form.targetCountry?.trim()) parts.push(`Target: ${form.targetCountry.trim()}`);
+  if (form.visaType?.trim()) parts.push(`Visa: ${form.visaType.trim()}`);
+  if (form.budgetFrom?.trim()) parts.push(`Budget: ${form.budgetFrom.trim()}`);
+  if (form.previousTraveler === "yes") {
+    const entries = form.prevTravelEntries
+      .filter((e) => e.country?.trim() || e.visa?.trim() || e.duration?.trim())
+      .map((e) => `${e.country || "-"} (${e.visa || "-"}, ${e.duration || "-"})`);
+    if (entries.length > 0) parts.push(`Prev travel: ${entries.join("; ")}`);
+  }
+  if (form.hasRejection === "yes" && (form.rejectionCountry?.trim() || form.rejectionReason?.trim())) {
+    parts.push(`Rejection: ${form.rejectionCountry?.trim() || "-"} - ${form.rejectionReason?.trim() || "-"}`);
+  }
+  if (form.action?.trim()) parts.push(`Action: ${form.action.trim()}`);
+  if (form.passport === "yes" || form.passport === "no") parts.push(`Passport: ${form.passport}`);
+  const base = parts.join(" | ");
+  const tagHistoryPart = existingNote?.split(" | ").find((p) => p.startsWith("TagHistory:"));
+  return tagHistoryPart ? `${base} | ${tagHistoryPart}` : base;
+}
+
+const defaultEditFormValues: InterestedFormValues = {
+  name: "",
+  place: "",
+  qualification: "",
+  nowWorking: "",
+  tradeField: "",
+  workExpFrom: "",
+  targetCountry: "",
+  visaType: "",
+  budgetFrom: "",
+  previousTraveler: "",
+  prevTravelCount: 1,
+  prevTravelEntries: [{ country: "", visa: "", duration: "" }],
+  hasRejection: "",
+  rejectionCountry: "",
+  rejectionReason: "",
+  action: "",
+  passport: "",
+};
+
+export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpdate }: LeadDetailModalProps) {
   const [tab, setTab] = useState<"overview" | "timeline" | "documents">(initialTab);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState<InterestedFormValues>(defaultEditFormValues);
 
   useEffect(() => {
     setTab(initialTab);
   }, [lead.id, initialTab]);
 
   const parsed = lead.note ? parseNote(lead.note) : {};
+  const targetCountry = parsed["Target"]?.includes(", Visa:")
+    ? parsed["Target"].split(", Visa:")[0].trim()
+    : parsed["Target"];
+  const visaType = parsed["Visa"] ?? (parsed["Target"]?.includes("Visa:") ? parsed["Target"].split("Visa:")[1]?.trim() : undefined);
+  const prevTravelStr = parsed["Prev travel"];
+  const rejectionStr = parsed["Rejection"];
+  const workingStr = parsed["Working"] ?? parsed["Occupation"] ?? "";
+
+  const initEditForm = () => {
+    const prevEntries = parsePrevTravelEntries(prevTravelStr);
+    const rej = parseRejection(rejectionStr);
+    setEditForm({
+      ...defaultEditFormValues,
+      name: lead.name || parsed["Name"] || "",
+      place: lead.place || parsed["Place"] || "",
+      qualification: parsed["Qualification"] || "",
+      nowWorking: workingStr ? "yes" : "no",
+      tradeField: workingStr || "",
+      workExpFrom: parsed["Experience from"]?.replace(/\s*yrs?\s*$/i, "") || "",
+      targetCountry: targetCountry || "",
+      visaType: visaType || "",
+      budgetFrom: parsed["Budget"] || "",
+      previousTraveler: prevTravelStr?.trim() ? "yes" : "no",
+      prevTravelCount: Math.max(1, prevEntries.length),
+      prevTravelEntries: prevEntries.length ? prevEntries : [{ country: "", visa: "", duration: "" }],
+      hasRejection: rejectionStr?.trim() ? "yes" : "no",
+      rejectionCountry: rej.country || "",
+      rejectionReason: rej.reason || "",
+      action: parsed["Action"] || "",
+      passport: (() => {
+        const p = (parsed["Passport"] ?? parsed["Passport status"] ?? "").trim().toLowerCase();
+        if (p === "yes" || p === "y") return "yes";
+        if (p === "no" || p === "n") return "no";
+        return "";
+      })(),
+    });
+  };
+
+  const handleStartEdit = () => {
+    initEditForm();
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    const newNote = buildNoteFromFormValues(editForm, lead.note);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: lead.id,
+          name: editForm.name.trim() || undefined,
+          place: editForm.place.trim() || undefined,
+          note: newNote,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to update");
+      }
+      onUpdate?.({ name: editForm.name.trim() || lead.name, place: editForm.place.trim() || lead.place, note: newNote });
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to update lead");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const action = parsed["Action"];
   const userNotes = getUserNotes(lead.note);
   const timelineCycles = getTimelineCycles(lead.note, lead, action);
-
-  const targetCountry = parsed["Target"]?.split(", Visa:")[0]?.trim();
-  const visaType = parsed["Target"]?.includes("Visa:") ? parsed["Target"].split("Visa:")[1]?.trim() : undefined;
 
   return (
     <div
@@ -174,6 +334,18 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: Lead
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {tab === "overview" && !isEditing && (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/20"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </button>
+              )}
               <div className="flex rounded-lg bg-white/10 p-1">
                 <button
                   type="button"
@@ -220,29 +392,65 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: Lead
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50/50 p-6">
           {tab === "overview" && (
             <div className="max-w-4xl">
-              {/* Profile sections */}
-              <div className="space-y-4">
-                {/* Contact + Qualification & Occupation side by side */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
-                  {/* Contact */}
-                  <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-                    <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                      </span>
-                      Contact
-                    </h3>
+              {isEditing ? (
+                <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                  <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                    <InterestedFormContent
+                      value={editForm}
+                      onChange={(updates) => setEditForm((prev) => ({ ...prev, ...updates }))}
+                      leadPlace={lead.place}
+                      showAction={false}
+                      showPassport={true}
+                    />
+                    <p className="text-xs text-slate-500 pt-1">
+                      Next Action is report-only and cannot be edited here.
+                    </p>
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      disabled={saving}
+                      className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      {saving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={saving}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+              <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+                {/* Contact */}
+                <div className="pb-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </span>
+                    Contact
+                  </h3>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
                     <div className="space-y-1">
-                      {lead.name && (
-                        <div className="flex gap-2 py-1">
-                          <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Name:</span>
-                          <span className="text-base font-semibold text-slate-900">{lead.name}</span>
-                        </div>
-                      )}
-                      <Field label="Place" value={lead.place} />
-                      {lead.number && (
+                      <div className="flex gap-2 py-1">
+                        <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Name:</span>
+                        <span
+                          className={`text-base font-semibold ${
+                            lead.name || parsed["Name"] ? "text-slate-900" : "text-slate-400 italic"
+                          }`}
+                        >
+                          {lead.name || parsed["Name"] || PLACEHOLDER}
+                        </span>
+                      </div>
+                      <Field label="Place" value={lead.place || parsed["Place"]} />
+                      {lead.number ? (
                         <a
                           href={`tel:${lead.number.replace(/\s/g, "").split(",")[0]}`}
                           className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 transition-all duration-200 hover:bg-sky-100 hover:shadow-sm"
@@ -253,8 +461,10 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: Lead
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                           </svg>
                         </a>
+                      ) : (
+                        <Field label="Phone" value={undefined} />
                       )}
-                      {parsed["Email"] && (
+                      {parsed["Email"] ? (
                         <a
                           href={`mailto:${parsed["Email"]}`}
                           className="flex gap-2 py-1 transition-colors duration-200 hover:text-sky-600"
@@ -262,31 +472,52 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: Lead
                           <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Email:</span>
                           <span className="text-base text-sky-600 hover:underline">{parsed["Email"]}</span>
                         </a>
-                      )}
-                      <Field label="Source" value={lead.source} />
-                      {lead.id && (
-                        <div className="flex gap-2 py-1 min-w-0" title={lead.id}>
-                          <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">ID:</span>
-                          <span className="min-w-0 truncate font-mono text-sm text-slate-600">{lead.id}</span>
-                        </div>
+                      ) : (
+                        <Field label="Email" value={undefined} />
                       )}
                     </div>
-                  </div>
-
-                  {/* Qualification & Occupation */}
-                  <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-                    <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                      </span>
-                      Qualification & Occupation
-                    </h3>
                     <div className="space-y-1">
-                      <Field label="Qualification" value={parsed["Qualification"]} />
-                      <Field label="Occupation" value={parsed["Working"] ?? parsed["Occupation"]} />
+                      <Field label="Source" value={lead.source} />
+                      <div className="flex gap-2 py-1 min-w-0" title={lead.id || undefined}>
+                        <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">ID:</span>
+                        <span className={`min-w-0 truncate font-mono text-sm ${lead.id ? "text-slate-600" : "text-slate-400 italic"}`}>
+                          {lead.id || PLACEHOLDER}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                      </svg>
+                    </span>
+                    Qualification
+                  </h3>
+                  <Field label="Qualification" value={parsed["Qualification"]} />
+                </div>
+
+                <div className="border-t border-slate-100 pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </span>
+                    Occupation
+                  </h3>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Field label="Occupation / Trade" value={parsed["Working"] ?? parsed["Occupation"]} />
+                      <Field label="Work experience" value={parsed["Experience from"] ?? parsed["Experience"]} />
+                      <Field label="Experience from (yrs)" value={parsed["Experience from"]} />
                       <Field label="Passport" value={parsed["Passport"] ?? parsed["Passport status"]} />
+                    </div>
+                    <div className="space-y-1">
                       <Field label="Budget" value={parsed["Budget"]} />
                       <Field label="Target Country" value={targetCountry} />
                       <Field label="Visa Type" value={visaType} />
@@ -294,64 +525,74 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview" }: Lead
                   </div>
                 </div>
 
-                {/* Travel History */}
-                {parsed["Prev travel"] && (
-                  <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-                    <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0h.5a2.5 2.5 0 002.5-2.5V8.935M12 12a2 2 0 104 0 2 2 0 00-4 0z" />
-                        </svg>
-                      </span>
-                      Travel History
-                    </h3>
-                    <Field label="Previous Travel" value={parsed["Prev travel"]} />
-                  </div>
-                )}
-
-                {/* Rejection */}
-                {parsed["Rejection"] && (
-                  <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-                    <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      </span>
-                      Rejection
-                    </h3>
-                    <Field label="Details" value={parsed["Rejection"]} />
-                  </div>
-                )}
-
-                {/* Next Action */}
-                {action && (
-                  <div className="rounded-xl border-2 border-amber-200 bg-amber-50/80 p-5 shadow-sm">
-                    <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <div className="border-t border-slate-100 pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0h.5a2.5 2.5 0 002.5-2.5V8.935M12 12a2 2 0 104 0 2 2 0 00-4 0z" />
                       </svg>
-                      Next Action
-                    </h3>
-                    <p className="font-medium text-amber-900">{action}</p>
-                  </div>
-                )}
+                    </span>
+                    Travel History
+                  </h3>
+                  <Field label="Previous Travel" value={parsed["Prev travel"]} />
+                </div>
 
-                {/* Notes */}
+                <div className="border-t border-slate-100 pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </span>
+                    Rejection
+                  </h3>
+                  <Field label="Details" value={parsed["Rejection"]} />
+                </div>
+
+                <div className="border-t border-slate-100 pt-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Action
+                  </h3>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Field
+                        label="Current action"
+                        value={(() => {
+                          if (action) return action;
+                          if (lead.tags === "Document received") return "Document received";
+                          const tagHistory = getTagHistory(lead.note);
+                          const lastTag = tagHistory[tagHistory.length - 1];
+                          if (lastTag) {
+                            const tagName = lastTag.replace(/\s*\([^)]*\)$/, "").trim();
+                            if (tagName === "Document received") return "Document received";
+                          }
+                          if (lead.note?.includes("Document received")) return "Document received";
+                          return undefined;
+                        })()}
+                      />
+                      <Field label="Next action" value={action} placeholder="—" />
+                    </div>
+                  </div>
+                </div>
+
                 {userNotes && !lead.note?.startsWith("Not Interested") && (
-                  <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+                  <div className="border-t border-slate-100 pt-5">
                     <h3 className="mb-3 text-sm font-semibold text-slate-800">Notes</h3>
                     <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 border-l-2 border-slate-200 pl-4">{userNotes}</pre>
                   </div>
                 )}
 
                 {lead.note?.startsWith("Not Interested") && (
-                  <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-5 shadow-sm">
+                  <div className="mt-5 rounded-lg bg-slate-50 p-4">
                     <h3 className="mb-2 text-sm font-semibold text-slate-800">Not Interested</h3>
                     <p className="text-sm text-slate-700">{lead.note}</p>
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 

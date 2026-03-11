@@ -139,6 +139,32 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
       return;
     }
 
+    if (tag === "Document received") {
+      setUpdating(lead.id);
+      const noteWithHistory = appendTagHistory(lead.note, "Document received");
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: lead.id,
+          tags: "Document received",
+          note: noteWithHistory,
+          moveToGreenBucket: true,
+        }),
+      });
+      setUpdating(null);
+      if (res.ok) {
+        const rect = rowRefs.current[lead.id]?.getBoundingClientRect() ?? null;
+        setGreenBucketPhase("move");
+        setGreenBucketLead({ ...lead, tags: "Document received", note: noteWithHistory });
+        setGreenBucketRect(rect);
+      } else {
+        if (onLeadUpdate) onLeadUpdate(lead.id, { tags: "Document received", note: noteWithHistory });
+        else onRefresh();
+      }
+      return;
+    }
+
     if (tag === "No Answer" || tag === "Switch Off" || tag === "Busy IVR") {
       setUpdating(lead.id);
       const noteWithHistory = appendTagHistory(lead.note, tag);
@@ -489,7 +515,14 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
       </div>
 
       {detailLead && (
-        <LeadDetailModal lead={detailLead} onClose={() => setDetailLead(null)} />
+        <LeadDetailModal
+          lead={detailLead}
+          onClose={() => setDetailLead(null)}
+          onUpdate={(updates) => {
+            setDetailLead((prev) => (prev ? { ...prev, ...updates } : null));
+            onLeadUpdate?.(detailLead.id, updates);
+          }}
+        />
       )}
       {callNowLead && (
         <CallNowModal
@@ -660,18 +693,18 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               setReviewRect(rect);
             } else {
               const noteParts: string[] = [];
-              if (result.name || result.place) {
-                noteParts.push(`Name: ${result.name || "-"}, Place: ${result.place || "-"}`);
-              }
+              if (result.name != null) noteParts.push(`Name: ${result.name.trim() || "-"}`);
+              if (result.place != null) noteParts.push(`Place: ${result.place.trim() || "-"}`);
               if (result.qualification) noteParts.push(`Qualification: ${result.qualification}`);
               if (result.nowWorking && result.tradeField) {
                 noteParts.push(`Working: ${result.tradeField}`);
               }
               if (result.workExperience) noteParts.push(`Experience: ${result.workExperience}`);
-              if (result.targetCountry || result.visaType) {
-                noteParts.push(`Target: ${result.targetCountry || "-"}, Visa: ${result.visaType || "-"}`);
-              }
+              if (result.workExpFrom) noteParts.push(`Experience from: ${result.workExpFrom} yrs`);
+              if (result.targetCountry) noteParts.push(`Target: ${result.targetCountry}`);
+              if (result.visaType) noteParts.push(`Visa: ${result.visaType}`);
               if (result.budget) noteParts.push(`Budget: ${result.budget}`);
+              if (result.budgetFrom) noteParts.push(`Budget from: ${result.budgetFrom}`);
               if (result.previousTraveler) {
                 if (result.prevTravelEntries && result.prevTravelEntries.length > 0) {
                   const parts = result.prevTravelEntries.map(
@@ -698,6 +731,10 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               };
               if (result.name?.trim()) body.name = result.name.trim();
               if (result.place?.trim()) body.place = result.place.trim();
+              // Document received → move directly to Green bucket (same as followup "Yes")
+              if (result.action === "Document received") {
+                body.moveToGreenBucket = true;
+              }
               const res = await fetch("/api/leads", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
@@ -708,7 +745,14 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 throw new Error(data.error || `Failed (${res.status})`);
               }
               setInterestedLead(null);
-              onRefresh();
+              if (result.action === "Document received") {
+                const rect = rowRefs.current[interestedLead.id]?.getBoundingClientRect() ?? null;
+                setGreenBucketPhase("move");
+                setGreenBucketLead({ ...interestedLead, tags: "Interested", note });
+                setGreenBucketRect(rect);
+              } else {
+                onRefresh();
+              }
             }
           }}
         />

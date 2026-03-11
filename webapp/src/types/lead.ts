@@ -9,7 +9,8 @@ export type TagOption =
   | "WhatsApp Not Available"
   | "WhatsApp No Reply"
   | "Not Interested"
-  | "Interested";
+  | "Interested"
+  | "Document received";
 
 export type LeadCategory = "active" | "callback" | "overdue";
 
@@ -41,6 +42,7 @@ export const TAG_OPTIONS: TagOption[] = [
   "WhatsApp No Reply",
   "Not Interested",
   "Interested",
+  "Document received",
 ];
 
 export const TAGS_FOR_NOT_CONNECTED: TagOption[] = [
@@ -56,7 +58,7 @@ export const WHATSAPP_SUB_TAGS: TagOption[] = [
   "WhatsApp No Reply",
 ];
 
-export const TAGS_FOR_CONNECTED: TagOption[] = ["Not Interested", "Interested"];
+export const TAGS_FOR_CONNECTED: TagOption[] = ["Not Interested", "Interested", "Document received"];
 
 export const NOT_INTERESTED_REASONS = [
   "Budget issue",

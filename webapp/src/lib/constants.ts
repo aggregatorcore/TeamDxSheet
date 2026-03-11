@@ -17,6 +17,7 @@ export const TAG_COLORS: Record<TagOption | "overdue", string> = {
   "WhatsApp No Reply": "bg-violet-200 text-violet-900 border-violet-400",
   "Not Interested": "bg-slate-200 text-slate-900 border-slate-400",
   Interested: "bg-emerald-200 text-emerald-900 border-emerald-400",
+  "Document received": "bg-teal-200 text-teal-900 border-teal-400",
   overdue: "bg-red-300 text-red-950 border-red-500",
 };
 
@@ -71,25 +72,62 @@ export const INDIA_STATES_AND_TERRITORIES: Record<string, string[]> = {
   ],
 };
 
-/** Target countries for Interested flow (flattened) */
-export const TARGET_COUNTRIES: string[] = [
-  ...PREFERRED_COUNTRIES.Schengen,
-  ...PREFERRED_COUNTRIES["Non-Schengen"],
-  ...PREFERRED_COUNTRIES.Gulf,
-  ...PREFERRED_COUNTRIES.Arab,
-].sort();
+/** Trade/field options by category for Interested flow */
+export const TRADE_CATEGORIES: Record<string, string[]> = {
+  Construction: [
+    "Mason", "Painter", "Construction Worker", "Scaffolder", "Rigger",
+    "Heavy Equipment Operator", "Crane Operator", "Forklift Operator",
+    "Foreman", "Site Supervisor", "Civil Supervisor", "Brick Layer",
+    "Tiles Fitter", "Marble Fitter", "Cement Worker", "Steel Fixer",
+    "Shuttering Carpenter", "Road Construction Worker", "Building Painter",
+  ],
+  "Electrical & HVAC": [
+    "Electrician", "AC Technician", "HVAC Technician", "Solar Technician",
+    "Wireman", "Electrical Fitter", "Panel Fitter", "Maintenance Electrician",
+  ],
+  Plumbing: [
+    "Plumber", "Pipe Fitter", "Drainage Worker", "Water Line Fitter",
+  ],
+  "Metal & Manufacturing": [
+    "Welder", "Fitter", "Turner", "CNC Operator", "Fabricator",
+    "Machinist", "Grinder", "Millwright", "Tool Maker", "Sheet Metal Worker",
+    "Lathe Operator", "Drilling Operator", "Assembly Worker",
+  ],
+  "Wood & Carpentry": [
+    "Carpenter", "Furniture Maker", "Wood Carver", "Cabinet Maker",
+  ],
+  Automotive: [
+    "Mechanic", "Driver", "Auto Electrician", "Diesel Mechanic",
+    "Tyre Technician", "Auto Body Painter", "Vehicle Cleaner",
+  ],
+  "Hospitality & Food": [
+    "Cook", "Chef", "Kitchen Helper", "Waiter", "Housekeeping",
+    "Hotel Staff", "Catering Worker", "Baker", "Butler",
+  ],
+  "Personal Care": [
+    "Tailor", "Barber", "Beautician", "Hair Stylist", "Spa Therapist",
+    "Massage Therapist", "Salon Worker",
+  ],
+  Healthcare: [
+    "Nurse", "Caregiver", "Lab Technician", "Pharmacy Assistant",
+    "Medical Assistant", "Hospital Attendant", "Home Care Worker",
+  ],
+  "Security & Facilities": [
+    "Security Guard", "Gardener", "Housekeeping", "Facility Supervisor",
+    "Gate Keeper", "Parking Attendant",
+  ],
+  "Sales & Admin": [
+    "Sales", "Retail", "Warehouse", "Supervisor", "Store Keeper",
+    "Office Boy", "Receptionist", "Data Entry", "Accountant",
+  ],
+  Other: ["Other"],
+};
 
-/** Trade/field options for Interested - Now working */
+/** All trade/field options flattened (for searchable dropdown) */
 export const TRADE_FIELDS: string[] = [
-  "Electrician", "Plumber", "Carpenter", "Welder", "Mason", "Painter",
-  "Mechanic", "Driver", "Cook", "Tailor", "Barber", "Beautician",
-  "AC Technician", "Fitter", "Turner", "CNC Operator", "Fabricator",
-  "HVAC Technician", "Solar Technician", "Security Guard", "Housekeeping",
-  "Gardener", "Construction Worker", "Scaffolder", "Rigger",
-  "Heavy Equipment Operator", "Crane Operator", "Forklift Operator",
-  "Nurse", "Caregiver", "Lab Technician", "Pharmacy Assistant",
-  "Sales", "Retail", "Warehouse", "Supervisor", "Foreman",
-  "Other",
+  ...new Set(
+    Object.values(TRADE_CATEGORIES).flat().sort((a, b) => a.localeCompare(b))
+  ),
 ];
 
 /** Visa types for Interested flow */
@@ -105,19 +143,58 @@ export const INTERESTED_ACTIONS: string[] = [
   "Client will discuss and tell later",
   "Client has trust issues",
   "Client wants to visit",
+  "Document received",
 ];
 
 /** No passport script for Interested flow */
 export const NO_PASSPORT_SCRIPT =
   "Sorry, without passport process nahi kiya ja sakta. Aap passport banwa kar phir contact karein.";
 
-/** Place options for Interested flow (States + UTs + major cities) */
+/** All world countries (for Place / location dropdown) */
+export const WORLD_COUNTRIES: string[] = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda",
+  "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain",
+  "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan",
+  "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria",
+  "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde",
+  "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros",
+  "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic",
+  "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt",
+  "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
+  "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana",
+  "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti",
+  "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq",
+  "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya",
+  "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho",
+  "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar",
+  "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands",
+  "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia",
+  "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal",
+  "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea",
+  "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama",
+  "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
+  "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia",
+  "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe",
+  "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore",
+  "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea",
+  "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland",
+  "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo",
+  "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
+  "UAE", "Uganda", "UK", "Ukraine", "USA", "Uruguay", "Uzbekistan", "Vanuatu",
+  "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe",
+];
+
+/** Target country options for Interested flow (all world countries) */
+export const TARGET_COUNTRIES: string[] = [...WORLD_COUNTRIES].sort();
+
+/** Place options for Interested flow (India states/UTs/cities + all world countries) */
 export const PLACE_OPTIONS: string[] = [
   ...INDIA_STATES_AND_TERRITORIES.States,
   ...INDIA_STATES_AND_TERRITORIES["Union Territories"],
   "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata", "Hyderabad", "Pune",
   "Ahmedabad", "Jaipur", "Lucknow", "Kanpur", "Nagpur", "Indore", "Bhopal",
   "Ludhiana", "Amritsar", "Jalandhar", "Patna", "Ranchi", "Bhubaneswar",
+  ...WORLD_COUNTRIES,
   "Other",
 ].sort();
 

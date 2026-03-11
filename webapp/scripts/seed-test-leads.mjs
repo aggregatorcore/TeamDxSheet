@@ -4,9 +4,11 @@
  *
  * Usage:
  *   node scripts/seed-test-leads.mjs [assignedTo] [count] [start]
- *   assignedTo = email to assign leads to (default: telecaller@teamdx.com)
+ *   assignedTo = "pool" for pool-only (unassigned), or email (default: telecaller@teamdx.com)
  *   count = number of leads to create (default: 40)
  *   start = start index in list (default: 0)
+ *
+ * 50 pool-only test leads: node scripts/seed-test-leads.mjs pool 50
  *
  * Required: SUPABASE_SERVICE_ROLE_KEY in .env.local
  */
@@ -90,6 +92,11 @@ const TEST_LEADS = [
   { source: "Referral", name: "Monika Sethi", place: "Moradabad", number: "9876543247" },
   { source: "Website", name: "Tarun Varma", place: "Gwalior", number: "9876543248" },
   { source: "Referral", name: "Ishita Khanna", place: "Cuttack", number: "9876543249" },
+  { source: "Website", name: "Varun Dutta", place: "Tiruchirappalli", number: "9876543250" },
+  { source: "Referral", name: "Shruti Banerjee", place: "Madurai", number: "9876543251" },
+  { source: "Website", name: "Aditya Ghosh", place: "Tirunelveli", number: "9876543252" },
+  { source: "Referral", name: "Nikita Sharma", place: "Salem", number: "9876543253" },
+  { source: "Website", name: "Karan Mehta", place: "Warangal", number: "9876543254" },
 ];
 
 const count = Math.min(parseInt(process.argv[3], 10) || 40, TEST_LEADS.length);

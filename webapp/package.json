@@ -9,7 +9,8 @@
     "lint": "next lint",
     "create-user": "node scripts/create-user.mjs",
     "migrate": "node scripts/run-migrations.mjs",
-    "seed-leads": "node scripts/seed-test-leads.mjs"
+    "seed-leads": "node scripts/seed-test-leads.mjs",
+    "seed-pool-leads": "node scripts/seed-test-leads.mjs pool 50"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

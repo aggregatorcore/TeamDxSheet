@@ -1,20 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  TARGET_COUNTRIES,
-  TRADE_FIELDS,
-  VISA_TYPES,
-  INTERESTED_ACTIONS,
-  NO_PASSPORT_SCRIPT,
-  PLACE_OPTIONS,
-  QUALIFICATION_OPTIONS,
-  WORK_EXP_YEARS,
-  BUDGET_OPTIONS,
-  REJECTION_REASONS,
-  PREV_TRAVEL_DURATION,
-  PREV_TRAVEL_COUNT_OPTIONS,
-} from "@/lib/constants";
+import { NO_PASSPORT_SCRIPT } from "@/lib/constants";
+import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
+
+const defaultFormValues: InterestedFormValues = {
+  name: "",
+  place: "",
+  qualification: "",
+  nowWorking: "",
+  tradeField: "",
+  workExpFrom: "",
+  targetCountry: "",
+  visaType: "",
+  budgetFrom: "",
+  previousTraveler: "",
+  prevTravelCount: 1,
+  prevTravelEntries: [{ country: "", visa: "", duration: "" }],
+  hasRejection: "",
+  rejectionCountry: "",
+  rejectionReason: "",
+  action: "",
+};
 
 export interface InterestedResult {
   hasPassport: boolean;
@@ -61,35 +68,20 @@ export function InterestedModal({
   const [loading, setLoading] = useState(false);
   const [passport, setPassport] = useState<"yes" | "no" | "">("");
   const [error, setError] = useState<string | null>(null);
-
-  // Form fields (when passport = yes)
-  const [name, setName] = useState(leadName);
-  const [place, setPlace] = useState(leadPlace);
-  const [qualification, setQualification] = useState("");
-  const [nowWorking, setNowWorking] = useState<"yes" | "no" | "">("");
-  const [tradeField, setTradeField] = useState("");
-  const [workExpFrom, setWorkExpFrom] = useState("");
-  const [targetCountry, setTargetCountry] = useState("");
-  const [visaType, setVisaType] = useState("");
-  const [budgetFrom, setBudgetFrom] = useState("");
-  const [previousTraveler, setPreviousTraveler] = useState<"yes" | "no" | "">("");
-  const [prevTravelCount, setPrevTravelCount] = useState<number>(1);
-  const [prevTravelEntries, setPrevTravelEntries] = useState<{ country: string; visa: string; duration: string }[]>([
-    { country: "", visa: "", duration: "" },
-  ]);
-  const [hasRejection, setHasRejection] = useState<"yes" | "no" | "">("");
-  const [rejectionCountry, setRejectionCountry] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
-  const [action, setAction] = useState("");
+  const [formValues, setFormValues] = useState<InterestedFormValues>(() => ({
+    ...defaultFormValues,
+    name: leadName,
+    place: leadPlace,
+  }));
 
   const isNoPassport = passport === "no";
   const isYesPassport = passport === "yes";
-  const isNowWorkingYes = nowWorking === "yes";
-  const isPrevTravelerYes = previousTraveler === "yes";
-  const isHasRejectionYes = hasRejection === "yes";
+  const isNowWorkingYes = formValues.nowWorking === "yes";
+  const isPrevTravelerYes = formValues.previousTraveler === "yes";
+  const isHasRejectionYes = formValues.hasRejection === "yes";
 
   const canConfirmNoPassport = isNoPassport;
-  const canConfirmYesPassport = isYesPassport && action.trim().length > 0;
+  const canConfirmYesPassport = isYesPassport && formValues.action.trim().length > 0;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -119,30 +111,31 @@ export function InterestedModal({
     if (!canConfirmYesPassport) return;
     setLoading(true);
     try {
+      const v = formValues;
       const result: InterestedResult = {
         hasPassport: true,
-        action: action.trim(),
+        action: v.action.trim(),
       };
-      if (name.trim()) result.name = name.trim();
-      if (place.trim()) result.place = place.trim();
-      if (qualification.trim()) result.qualification = qualification.trim();
+      if (v.name.trim()) result.name = v.name.trim();
+      if (v.place.trim()) result.place = v.place.trim();
+      if (v.qualification.trim()) result.qualification = v.qualification.trim();
       if (isNowWorkingYes) {
         result.nowWorking = true;
-        if (tradeField.trim()) result.tradeField = tradeField.trim();
+        if (v.tradeField.trim()) result.tradeField = v.tradeField.trim();
       }
-      if (workExpFrom.trim()) {
-        result.workExperience = `${workExpFrom} years`;
-        result.workExpFrom = workExpFrom.trim();
+      if (v.workExpFrom.trim()) {
+        result.workExperience = `${v.workExpFrom} years`;
+        result.workExpFrom = v.workExpFrom.trim();
       }
-      if (targetCountry.trim()) result.targetCountry = targetCountry.trim();
-      if (visaType.trim()) result.visaType = visaType.trim();
-      if (budgetFrom.trim()) {
-        result.budget = budgetFrom.trim();
-        result.budgetFrom = budgetFrom.trim();
+      if (v.targetCountry.trim()) result.targetCountry = v.targetCountry.trim();
+      if (v.visaType.trim()) result.visaType = v.visaType.trim();
+      if (v.budgetFrom.trim()) {
+        result.budget = v.budgetFrom.trim();
+        result.budgetFrom = v.budgetFrom.trim();
       }
       if (isPrevTravelerYes) {
         result.previousTraveler = true;
-        const entries = prevTravelEntries
+        const entries = v.prevTravelEntries
           .filter((e) => e.country.trim() || e.visa.trim() || e.duration.trim())
           .map((e) => ({
             country: e.country.trim(),
@@ -153,8 +146,8 @@ export function InterestedModal({
       }
       if (isHasRejectionYes) {
         result.hasRejection = true;
-        if (rejectionCountry.trim()) result.rejectionCountry = rejectionCountry.trim();
-        if (rejectionReason.trim()) result.rejectionReason = rejectionReason.trim();
+        if (v.rejectionCountry.trim()) result.rejectionCountry = v.rejectionCountry.trim();
+        if (v.rejectionReason.trim()) result.rejectionReason = v.rejectionReason.trim();
       }
       await onConfirm(result);
       onClose();
@@ -167,22 +160,7 @@ export function InterestedModal({
 
   const resetForm = () => {
     setPassport("");
-    setName(leadName);
-    setPlace(leadPlace);
-    setQualification("");
-    setNowWorking("");
-    setTradeField("");
-    setWorkExpFrom("");
-    setTargetCountry("");
-    setVisaType("");
-    setBudgetFrom("");
-    setPreviousTraveler("");
-    setPrevTravelCount(1);
-    setPrevTravelEntries([{ country: "", visa: "", duration: "" }]);
-    setHasRejection("");
-    setRejectionCountry("");
-    setRejectionReason("");
-    setAction("");
+    setFormValues({ ...defaultFormValues, name: leadName, place: leadPlace });
     setError(null);
   };
 
@@ -272,7 +250,7 @@ export function InterestedModal({
             </div>
           )}
 
-          {/* Yes passport - full form */}
+          {/* Yes passport - full form (same as LeadDetailModal edit) */}
           {isYesPassport && (
             <>
               <button
@@ -282,420 +260,12 @@ export function InterestedModal({
               >
                 Back
               </button>
-              <div className="space-y-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-700">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Client name"
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-700">
-                      Place
-                    </label>
-                    <select
-                      value={place}
-                      onChange={(e) => setPlace(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    >
-                      <option value="">Select</option>
-                      {[
-                        ...PLACE_OPTIONS,
-                        ...(leadPlace && !PLACE_OPTIONS.includes(leadPlace) ? [leadPlace] : []),
-                      ].map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">
-                    Qualification
-                  </label>
-                  <select
-                    value={qualification}
-                    onChange={(e) => setQualification(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">Select</option>
-                    {QUALIFICATION_OPTIONS.map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
-                  <p className="text-xs font-medium text-slate-700">
-                    Abhi working hai?
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNowWorking("yes")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        nowWorking === "yes"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNowWorking("no");
-                        setTradeField("");
-                      }}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        nowWorking === "no"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      No
-                    </button>
-                  </div>
-                  {isNowWorkingYes && (
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-700">
-                        Field / Trade
-                      </label>
-                      <select
-                        value={tradeField}
-                        onChange={(e) => setTradeField(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                      >
-                        <option value="">Select</option>
-                        {TRADE_FIELDS.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">
-                    Work experience
-                  </label>
-                  <select
-                    value={workExpFrom}
-                    onChange={(e) => setWorkExpFrom(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">Select</option>
-                    {WORK_EXP_YEARS.map((y) => (
-                      <option key={y} value={y}>
-                        {y} yrs
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-700">
-                      Target country
-                    </label>
-                    <select
-                      value={targetCountry}
-                      onChange={(e) => setTargetCountry(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    >
-                      <option value="">Select</option>
-                      {TARGET_COUNTRIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-700">
-                      Visa type
-                    </label>
-                    <select
-                      value={visaType}
-                      onChange={(e) => setVisaType(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    >
-                      <option value="">Select</option>
-                      {VISA_TYPES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">
-                    Budget
-                  </label>
-                  <select
-                    value={budgetFrom}
-                    onChange={(e) => setBudgetFrom(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">Select</option>
-                    {BUDGET_OPTIONS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
-                  <p className="text-xs font-medium text-slate-700">
-                    Pehle India se bahar travel kiya?
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPreviousTraveler("yes")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        previousTraveler === "yes"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPreviousTraveler("no");
-                        setPrevTravelCount(1);
-                        setPrevTravelEntries([{ country: "", visa: "", duration: "" }]);
-                      }}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        previousTraveler === "no"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      No
-                    </button>
-                  </div>
-                  {isPrevTravelerYes && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-700">
-                          Kitni country main travel kiya hai?
-                        </label>
-                        <select
-                          value={prevTravelCount}
-                          onChange={(e) => {
-                            const n = parseInt(e.target.value, 10);
-                            setPrevTravelCount(n);
-                            setPrevTravelEntries((prev) => {
-                              const next = [...prev];
-                              while (next.length < n) {
-                                next.push({ country: "", visa: "", duration: "" });
-                              }
-                              return next.slice(0, n);
-                            });
-                          }}
-                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        >
-                          {PREV_TRAVEL_COUNT_OPTIONS.map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      {prevTravelEntries.slice(0, prevTravelCount).map((entry, i) => (
-                        <div
-                          key={i}
-                          className="rounded-lg border border-slate-200 bg-white p-3 space-y-2"
-                        >
-                          <p className="text-xs font-medium text-slate-600">
-                            Country {i + 1}
-                          </p>
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-700">
-                                Country
-                              </label>
-                              <select
-                                value={entry.country}
-                                onChange={(e) => {
-                                  setPrevTravelEntries((prev) => {
-                                    const next = [...prev];
-                                    next[i] = { ...next[i], country: e.target.value };
-                                    return next;
-                                  });
-                                }}
-                                className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                              >
-                                <option value="">Select</option>
-                                {TARGET_COUNTRIES.map((c) => (
-                                  <option key={c} value={c}>
-                                    {c}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-700">
-                                Visa
-                              </label>
-                              <select
-                                value={entry.visa}
-                                onChange={(e) => {
-                                  setPrevTravelEntries((prev) => {
-                                    const next = [...prev];
-                                    next[i] = { ...next[i], visa: e.target.value };
-                                    return next;
-                                  });
-                                }}
-                                className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                              >
-                                <option value="">Select</option>
-                                {VISA_TYPES.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-700">
-                                Duration
-                              </label>
-                              <select
-                                value={entry.duration}
-                                onChange={(e) => {
-                                  setPrevTravelEntries((prev) => {
-                                    const next = [...prev];
-                                    next[i] = { ...next[i], duration: e.target.value };
-                                    return next;
-                                  });
-                                }}
-                                className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                              >
-                                <option value="">Select</option>
-                                {PREV_TRAVEL_DURATION.map((d) => (
-                                  <option key={d} value={d}>
-                                    {d}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
-                  <p className="text-xs font-medium text-slate-700">
-                    Kisi country ki rejection hai?
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setHasRejection("yes")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        hasRejection === "yes"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHasRejection("no");
-                        setRejectionCountry("");
-                        setRejectionReason("");
-                      }}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        hasRejection === "no"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      No
-                    </button>
-                  </div>
-                  {isHasRejectionYes && (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-700">
-                          Country
-                        </label>
-                        <select
-                          value={rejectionCountry}
-                          onChange={(e) => setRejectionCountry(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        >
-                          <option value="">Select</option>
-                          {TARGET_COUNTRIES.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-700">
-                          Reason
-                        </label>
-                        <select
-                          value={rejectionReason}
-                          onChange={(e) => setRejectionReason(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        >
-                          <option value="">Select</option>
-                          {REJECTION_REASONS.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-700">
-                    Action <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={action}
-                    onChange={(e) => setAction(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">Select</option>
-                    {INTERESTED_ACTIONS.map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              <InterestedFormContent
+                value={formValues}
+                onChange={(updates) => setFormValues((prev) => ({ ...prev, ...updates }))}
+                leadPlace={leadPlace}
+                showAction={true}
+              />
             </>
           )}
 
