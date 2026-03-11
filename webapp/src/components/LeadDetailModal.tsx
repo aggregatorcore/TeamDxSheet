@@ -549,34 +549,64 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                   <Field label="Details" value={parsed["Rejection"]} />
                 </div>
 
-                <div className="border-t border-slate-100 pt-5">
-                  <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Action
-                  </h3>
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Field
-                        label="Current action"
-                        value={(() => {
-                          if (action) return action;
-                          if (lead.tags === "Document received") return "Document received";
-                          const tagHistory = getTagHistory(lead.note);
-                          const lastTag = tagHistory[tagHistory.length - 1];
-                          if (lastTag) {
-                            const tagName = lastTag.replace(/\s*\([^)]*\)$/, "").trim();
-                            if (tagName === "Document received") return "Document received";
-                          }
-                          if (lead.note?.includes("Document received")) return "Document received";
-                          return undefined;
-                        })()}
-                      />
-                      <Field label="Next action" value={action} placeholder="—" />
+                {/* Callback / Schedule for Not Connected (No Answer, Switch Off, Busy IVR) */}
+                {lead.flow === "Not Connected" &&
+                  (lead.tags === "No Answer" || lead.tags === "Switch Off" || lead.tags === "Busy IVR") && (
+                  <div className="border-t border-slate-100 pt-5">
+                    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </span>
+                      Callback / Schedule
+                    </h3>
+                    <Field
+                      label="Callback scheduled"
+                      value={
+                        lead.callbackTime
+                          ? new Date(lead.callbackTime).toLocaleString("en-IN", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : undefined
+                      }
+                      placeholder="Not scheduled — schedule from lead table"
+                    />
+                  </div>
+                )}
+
+                {/* Action (Current / Next) only for Connected + Interested or Document received; hide for Not Connected / No Answer etc. */}
+                {(lead.flow === "Connected" && (lead.tags === "Interested" || lead.tags === "Document received")) && (
+                  <div className="border-t border-slate-100 pt-5">
+                    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Action
+                    </h3>
+                    <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Field
+                          label="Current action"
+                          value={(() => {
+                            if (action) return action;
+                            if (lead.tags === "Document received") return "Document received";
+                            const tagHistory = getTagHistory(lead.note);
+                            const lastTag = tagHistory[tagHistory.length - 1];
+                            if (lastTag) {
+                              const tagName = lastTag.replace(/\s*\([^)]*\)$/, "").trim();
+                              if (tagName === "Document received") return "Document received";
+                            }
+                            if (lead.note?.includes("Document received")) return "Document received";
+                            return undefined;
+                          })()}
+                        />
+                        <Field label="Next action" value={action} placeholder="—" />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {userNotes && !lead.note?.startsWith("Not Interested") && (
                   <div className="border-t border-slate-100 pt-5">
