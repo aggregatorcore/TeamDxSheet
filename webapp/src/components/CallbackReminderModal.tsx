@@ -49,8 +49,8 @@ function getNextAttempt(prevNote: string | undefined, newTag: TagOption): number
 
 export interface CallbackReminderModalProps {
   lead: Lead;
-  /** "reminder" = countdown running, show wait + OK / Client callback. "callNow" = time reached, show Call now + Dial / Abhi nahi. */
-  entryStep?: "reminder" | "callNow";
+  /** "reminder" = countdown running. "callNow" = time reached, show Call now + Dial. "result" = open directly at Did the call connect? (e.g. from OverdueCallModal after Dial). */
+  entryStep?: "reminder" | "callNow" | "result";
   onClose: () => void;
   onSuccess: () => void;
   onConnectInterested?: (lead: Lead) => void;
@@ -70,7 +70,9 @@ export function CallbackReminderModal({
   onInvalidNumber,
 }: CallbackReminderModalProps) {
   const countdown = useCountdown(lead.callbackTime || null);
-  const [step, setStep] = useState<Step>(entryStep === "callNow" ? "callNow" : "reminder");
+  const [step, setStep] = useState<Step>(
+    entryStep === "result" ? "result" : entryStep === "callNow" ? "callNow" : "reminder"
+  );
   const [tag, setTag] = useState<TagOption | "">("");
   const [date, setDate] = useState(() => {
     const d = new Date(Date.now() + 30 * 60 * 1000);
@@ -85,6 +87,15 @@ export function CallbackReminderModal({
 
   const now = new Date();
   const today = formatDateForInput(now);
+
+  const handleBack = () => {
+    if (step === "reminder") onClose();
+    else if (step === "callNow") setStep("reminder");
+    else if (step === "result") setStep("callNow");
+    else if (step === "connected") setStep("result");
+    else if (step === "not_connect") setStep("result");
+    else if (step === "schedule") setStep("not_connect");
+  };
 
   const applyPreset = (mins?: number, custom?: () => Date) => {
     const d = custom ? custom() : new Date(Date.now() + (mins ?? 0) * 60 * 1000);
@@ -174,22 +185,36 @@ export function CallbackReminderModal({
         className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative bg-gradient-to-br from-amber-700 to-amber-800 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+        <div className="relative flex items-center gap-2 bg-gradient-to-br from-amber-700 to-amber-800 px-4 py-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+            aria-label="Back"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <h2 className="text-base font-semibold text-white">Callback</h2>
-              <p className="text-xs text-amber-200">{lead.name}{lead.number ? ` • ${lead.number}` : ""}</p>
+              <p className="mt-0.5 truncate text-sm font-medium text-amber-100" title={[lead.name, lead.number].filter(Boolean).join(" • ") || undefined}>
+                {lead.name && <span>{lead.name}</span>}
+                {lead.name && lead.number && <span className="mx-1.5 opacity-75">•</span>}
+                {lead.number && <span className="font-mono">{lead.number.replace(/\s/g, "").split(",")[0]}</span>}
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-2 right-2 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
+            className="shrink-0 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
             aria-label="Close"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -202,7 +227,10 @@ export function CallbackReminderModal({
           {step === "reminder" && (
             <>
               <p className="mb-4 text-sm font-medium text-neutral-700">
-                Wait – call this lead after {countdown || "—"}.
+                Wait – call this lead after{" "}
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 ring-1 ring-amber-300">
+                  {countdown || "—"}
+                </span>
               </p>
               <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
                 <button
@@ -225,9 +253,14 @@ export function CallbackReminderModal({
 
           {step === "callNow" && (
             <>
-              <p className="mb-2 text-sm font-medium text-neutral-700">Call this lead now</p>
+              <p className="mb-3 text-base font-semibold text-neutral-800">Callback – call this lead now</p>
               {lead.number && (
-                <p className="mb-4 text-sm text-neutral-600">Number: {lead.number}</p>
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-700/80">Number</p>
+                  <p className="mt-0.5 font-mono text-lg font-semibold text-amber-900 tracking-wide">
+                    {lead.number.replace(/\s/g, "").split(",")[0]}
+                  </p>
+                </div>
               )}
               <div className="flex gap-3">
                 <button

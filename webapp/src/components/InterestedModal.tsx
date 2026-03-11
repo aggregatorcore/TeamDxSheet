@@ -78,6 +78,11 @@ export function InterestedModal({
   const isYesPassport = passport === "yes";
   const isNowWorkingYes = formValues.nowWorking === "yes";
   const isPrevTravelerYes = formValues.previousTraveler === "yes";
+
+  const handleBack = () => {
+    if (passport) setPassport("");
+    else onClose();
+  };
   const isHasRejectionYes = formValues.hasRejection === "yes";
 
   const canConfirmNoPassport = isNoPassport;
@@ -174,21 +179,21 @@ export function InterestedModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
-              <svg
-                className="h-4 w-4 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
+        <div className="relative flex shrink-0 items-center gap-2 bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+            aria-label="Back"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
+              <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
@@ -205,7 +210,7 @@ export function InterestedModal({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-2 right-2 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
+            className="shrink-0 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
             aria-label="Close"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

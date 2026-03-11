@@ -23,14 +23,36 @@ input, select, textarea {
   color: #171717;
 }
 
-/* Callback blink animation - 30 sec before callback time */
+/* Call Now row - smooth pulsing amber ring + soft fill (same style as overdue) */
 @keyframes callback-blink {
-  0%, 100% { background-color: rgb(254 249 195); }
-  50% { background-color: rgb(253 224 71); }
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgb(254 243 199);
+    background-color: rgb(255 251 235);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(251 191 36), 0 0 12px -2px rgb(253 224 71);
+    background-color: rgb(254 249 195);
+  }
 }
 
 .animate-callback-blink {
-  animation: callback-blink 1s ease-in-out infinite;
+  animation: callback-blink 1.8s ease-in-out infinite;
+}
+
+/* Overdue lead row - smooth pulsing red ring + soft fill */
+@keyframes overdue-blink {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgb(254 226 226);
+    background-color: rgb(255 250 250);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(248 113 113), 0 0 12px -2px rgb(254 202 202);
+    background-color: rgb(254 242 242);
+  }
+}
+
+.animate-overdue-blink {
+  animation: overdue-blink 1.8s ease-in-out infinite;
 }
 
 /* Exhaust move animation */

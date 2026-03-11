@@ -1,24 +1,47 @@
 import type { TagOption } from "@/types/lead";
 import type { FlowOption } from "@/types/lead";
 
+const badgeBase = "font-semibold shadow-sm rounded-md";
 export const FLOW_COLORS: Record<FlowOption, string> = {
-  Select: "bg-neutral-100 text-neutral-700 border-neutral-300",
-  Connected: "bg-emerald-100 text-emerald-800 border-emerald-400",
-  "Not Connected": "bg-amber-100 text-amber-800 border-amber-400",
+  Select: `bg-neutral-200 text-neutral-800 border border-neutral-400 ${badgeBase}`,
+  Connected: `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
+  "Not Connected": `bg-red-500 text-white border border-red-600 ${badgeBase}`,
 };
 
 export const TAG_COLORS: Record<TagOption | "overdue", string> = {
-  "No Answer": "bg-blue-200 text-blue-900 border-blue-400",
-  "Switch Off": "bg-amber-200 text-amber-900 border-amber-400",
-  "Busy IVR": "bg-orange-200 text-orange-900 border-orange-400",
-  "Incoming Off": "bg-sky-200 text-sky-900 border-sky-400",
-  "Invalid Number": "bg-red-200 text-red-900 border-red-400",
-  "WhatsApp Not Available": "bg-purple-200 text-purple-900 border-purple-400",
-  "WhatsApp No Reply": "bg-violet-200 text-violet-900 border-violet-400",
-  "Not Interested": "bg-slate-200 text-slate-900 border-slate-400",
-  Interested: "bg-emerald-200 text-emerald-900 border-emerald-400",
-  "Document received": "bg-teal-200 text-teal-900 border-teal-400",
-  overdue: "bg-red-300 text-red-950 border-red-500",
+  "No Answer": `bg-blue-500 text-white border border-blue-600 ${badgeBase}`,
+  "Switch Off": `bg-amber-500 text-white border border-amber-600 ${badgeBase}`,
+  "Busy IVR": `bg-orange-500 text-white border border-orange-600 ${badgeBase}`,
+  "Incoming Off": `bg-sky-500 text-white border border-sky-600 ${badgeBase}`,
+  "Invalid Number": `bg-red-400 text-white border border-red-500 ${badgeBase}`,
+  "WhatsApp Not Available": `bg-purple-500 text-white border border-purple-600 ${badgeBase}`,
+  "WhatsApp No Reply": `bg-violet-500 text-white border border-violet-600 ${badgeBase}`,
+  "Not Interested": `bg-slate-500 text-white border border-slate-600 ${badgeBase}`,
+  Interested: `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
+  "Document received": `bg-teal-500 text-white border border-teal-600 ${badgeBase}`,
+  overdue: `bg-red-600 text-white border border-red-700 ${badgeBase}`,
+};
+
+/** Text-only colors for Flow in table (no button/badge style) */
+export const FLOW_TEXT_COLORS: Record<FlowOption, string> = {
+  Select: "text-neutral-700",
+  Connected: "text-emerald-600",
+  "Not Connected": "text-red-600",
+};
+
+/** Text-only colors for Tag in table (no button/badge style) */
+export const TAG_TEXT_COLORS: Record<TagOption | "overdue", string> = {
+  "No Answer": "text-blue-600",
+  "Switch Off": "text-amber-700",
+  "Busy IVR": "text-orange-600",
+  "Incoming Off": "text-sky-600",
+  "Invalid Number": "text-red-600",
+  "WhatsApp Not Available": "text-purple-600",
+  "WhatsApp No Reply": "text-violet-600",
+  "Not Interested": "text-slate-600",
+  Interested: "text-emerald-600",
+  "Document received": "text-teal-600",
+  overdue: "text-red-600",
 };
 
 export const GRACE_PERIOD_HOURS = 2;
@@ -135,6 +158,9 @@ export const VISA_TYPES: string[] = [
   "Work Visa", "Skilled Worker", "Student Visa", "Tourist Visa",
   "Business Visa", "Family Visa", "Permanent Residence", "Other",
 ];
+
+/** Action that gets default 1hr followup countdown when selected */
+export const INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR = "Asked client to share documents";
 
 /** Actions for Interested flow */
 export const INTERESTED_ACTIONS: string[] = [
