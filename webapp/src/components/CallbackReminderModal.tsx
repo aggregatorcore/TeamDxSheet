@@ -130,45 +130,6 @@ export function CallbackReminderModal({
     }
   };
 
-  const handleNotConnectNext = async () => {
-    if (!tag) {
-      setError("Select tag");
-      return;
-    }
-    if (tag === "Invalid Number") {
-      if (onInvalidNumber) {
-        onInvalidNumber(lead);
-        onClose();
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      const noteWithHistory = appendTagHistory(lead.note, tag);
-      const res = await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: lead.id,
-          flow: "Not Connected",
-          tags: tag,
-          note: noteWithHistory,
-          category: "active",
-        }),
-      });
-      setLoading(false);
-      if (res.ok) {
-        onSuccess();
-        onClose();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Failed");
-      }
-      return;
-    }
-    setError(null);
-    setStep("schedule");
-  };
-
   const handleSchedule = async () => {
     if (!tag || !date || !time) {
       setError("Select date and time");

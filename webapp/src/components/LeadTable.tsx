@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, TagOption } from "@/types/lead";
+import type { Lead } from "@/types/lead";
 import { CallbackModal } from "./CallbackModal";
 import { WhatsAppModal } from "./WhatsAppModal";
 import { WhatsAppFollowupModal } from "./WhatsAppFollowupModal";
@@ -55,7 +55,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [reviewingLead, setReviewingLead] = useState<Lead | null>(null);
   const [reviewRect, setReviewRect] = useState<DOMRect | null>(null);
   const [reviewPhase, setReviewPhase] = useState<"move" | "slide">("move");
-  const [updating, setUpdating] = useState<string | null>(null);
+  const [, setUpdating] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const [callDialLead, setCallDialLead] = useState<Lead | null>(null);
   const [callbackReminderLead, setCallbackReminderLead] = useState<Lead | null>(null);
