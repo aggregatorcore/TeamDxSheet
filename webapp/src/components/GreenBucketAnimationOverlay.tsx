@@ -14,6 +14,7 @@ interface GreenBucketAnimationOverlayProps {
 
 export function GreenBucketAnimationOverlay({
   lead,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- rowRect kept for API; overlay uses fixed layout
   rowRect,
   onComplete,
 }: GreenBucketAnimationOverlayProps) {
