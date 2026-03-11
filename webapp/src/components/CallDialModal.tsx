@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Lead, TagOption } from "@/types/lead";
-import { TAGS_FOR_CONNECTED, TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
+import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 

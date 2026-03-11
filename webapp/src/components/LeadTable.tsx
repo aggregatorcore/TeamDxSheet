@@ -7,7 +7,7 @@ import { CallbackModal } from "./CallbackModal";
 import { WhatsAppModal } from "./WhatsAppModal";
 import { WhatsAppFollowupModal } from "./WhatsAppFollowupModal";
 import { InvalidNumberModal } from "./InvalidNumberModal";
-import { NotInterestedModal, type NotInterestedResult } from "./NotInterestedModal";
+import { NotInterestedModal } from "./NotInterestedModal";
 import { InterestedModal } from "./InterestedModal";
 import { InterestedFollowupModal } from "./InterestedFollowupModal";
 import { GreenBucketAnimationOverlay } from "./GreenBucketAnimationOverlay";

@@ -15,8 +15,6 @@ interface NotInterestedModalProps {
 }
 
 export function NotInterestedModal({
-  leadName,
-  leadNumber,
   onClose,
   onBack,
   onConfirm,
