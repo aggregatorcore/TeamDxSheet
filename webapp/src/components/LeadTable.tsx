@@ -2,9 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, FlowOption, TagOption } from "@/types/lead";
-import { FlowDropdown } from "./FlowDropdown";
-import { TagsDropdown } from "./TagsDropdown";
+import type { Lead, TagOption } from "@/types/lead";
 import { CallbackModal } from "./CallbackModal";
 import { WhatsAppModal } from "./WhatsAppModal";
 import { WhatsAppFollowupModal } from "./WhatsAppFollowupModal";
@@ -17,9 +15,10 @@ import { ExhaustAnimationOverlay } from "./ExhaustAnimationOverlay";
 import { ReviewAnimationOverlay } from "./ReviewAnimationOverlay";
 import { CallbackCountdown } from "./CallbackCountdown";
 import { LeadDetailModal } from "./LeadDetailModal";
-import { CallNowModal } from "./CallNowModal";
+import { CallDialModal } from "./CallDialModal";
+import { CallbackReminderModal } from "./CallbackReminderModal";
 import { useCurrentTime } from "@/hooks/useCurrentTime";
-import { BLINK_BEFORE_SECONDS, GRACE_PERIOD_HOURS, NO_PASSPORT_SCRIPT } from "@/lib/constants";
+import { BLINK_BEFORE_SECONDS, FLOW_COLORS, GRACE_PERIOD_HOURS, NO_PASSPORT_SCRIPT, TAG_COLORS } from "@/lib/constants";
 import { appendTagHistory } from "@/lib/leadNote";
 
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -44,6 +43,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [followupLead, setFollowupLead] = useState<Lead | null>(null);
   const [invalidLead, setInvalidLead] = useState<Lead | null>(null);
   const [notInterestedLead, setNotInterestedLead] = useState<Lead | null>(null);
+  const [notInterestedFrom, setNotInterestedFrom] = useState<"callDial" | "callNow" | "callbackReminder" | null>(null);
   const [interestedLead, setInterestedLead] = useState<Lead | null>(null);
   const [interestedFollowupLead, setInterestedFollowupLead] = useState<Lead | null>(null);
   const [greenBucketLead, setGreenBucketLead] = useState<Lead | null>(null);
@@ -57,6 +57,8 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [reviewPhase, setReviewPhase] = useState<"move" | "slide">("move");
   const [updating, setUpdating] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
+  const [callDialLead, setCallDialLead] = useState<Lead | null>(null);
+  const [callbackReminderLead, setCallbackReminderLead] = useState<Lead | null>(null);
   const [callNowLead, setCallNowLead] = useState<Lead | null>(null);
 
   const handleExhaustMoveComplete = useCallback(() => {
@@ -108,107 +110,6 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     }, 1200);
     return () => clearTimeout(t);
   }, [greenBucketPhase, onRefresh, router, onGreenBucketComplete]);
-
-  const handleFlowChange = async (lead: Lead, flow: FlowOption) => {
-    setUpdating(lead.id);
-    await fetch("/api/leads", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: lead.id, flow }),
-    });
-    setUpdating(null);
-    if (onLeadUpdate) onLeadUpdate(lead.id, { flow });
-    else onRefresh();
-  };
-
-  const handleTagSelect = async (lead: Lead, tag: TagOption | "") => {
-    if (!tag) return;
-
-    if (tag === "Invalid Number") {
-      setInvalidLead(lead);
-      return;
-    }
-
-    if (tag === "Not Interested") {
-      setNotInterestedLead(lead);
-      return;
-    }
-
-    if (tag === "Interested") {
-      setInterestedLead(lead);
-      return;
-    }
-
-    if (tag === "Document received") {
-      setUpdating(lead.id);
-      const noteWithHistory = appendTagHistory(lead.note, "Document received");
-      const res = await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: lead.id,
-          tags: "Document received",
-          note: noteWithHistory,
-          moveToGreenBucket: true,
-        }),
-      });
-      setUpdating(null);
-      if (res.ok) {
-        const rect = rowRefs.current[lead.id]?.getBoundingClientRect() ?? null;
-        setGreenBucketPhase("move");
-        setGreenBucketLead({ ...lead, tags: "Document received", note: noteWithHistory });
-        setGreenBucketRect(rect);
-      } else {
-        if (onLeadUpdate) onLeadUpdate(lead.id, { tags: "Document received", note: noteWithHistory });
-        else onRefresh();
-      }
-      return;
-    }
-
-    if (tag === "No Answer" || tag === "Switch Off" || tag === "Busy IVR") {
-      setUpdating(lead.id);
-      const noteWithHistory = appendTagHistory(lead.note, tag);
-      await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: lead.id, tags: tag, note: noteWithHistory }),
-      });
-      setUpdating(null);
-      if (onLeadUpdate) onLeadUpdate(lead.id, { tags: tag, note: noteWithHistory });
-      setCallbackLead(lead);
-      return;
-    }
-
-    if (tag === "Incoming Off") {
-      setUpdating(lead.id);
-      const noteWithHistory = appendTagHistory(lead.note, tag);
-      await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: lead.id, tags: tag, note: noteWithHistory }),
-      });
-      setUpdating(null);
-      if (onLeadUpdate) onLeadUpdate(lead.id, { tags: tag, note: noteWithHistory });
-      setWhatsappLead(lead);
-      return;
-    }
-
-    setUpdating(lead.id);
-    const noteWithHistory = appendTagHistory(lead.note, tag);
-    await fetch("/api/leads", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: lead.id,
-        tags: tag,
-        note: noteWithHistory,
-        category: "active",
-      }),
-    });
-    setUpdating(null);
-    if (onLeadUpdate) onLeadUpdate(lead.id, { tags: tag, note: noteWithHistory, category: "active" });
-    else onRefresh();
-  };
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const hasCallbacks = leads.some((l) => l.callbackTime);
@@ -299,8 +200,8 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const bodyTableRef = useRef<HTMLTableElement>(null);
 
-  /* Column widths as % - table fits viewport */
-  const colWidths = ["8%", "10%", "14%", "12%", "14%", "14%", "14%", "14%"];
+  /* Column widths as % - table fits viewport (Flow + Tags merged into one) */
+  const colWidths = ["8%", "10%", "14%", "12%", "14%", "20%", "14%"];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-lg">
@@ -319,7 +220,6 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             <col style={{ width: colWidths[4] }} />
             <col style={{ width: colWidths[5] }} />
             <col style={{ width: colWidths[6] }} />
-            <col style={{ width: colWidths[7] }} />
           </colgroup>
           <thead>
             <tr>
@@ -328,8 +228,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Name</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Place</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Number</th>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Flow</th>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Tags</th>
+              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Flow / Tag</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap rounded-tr-lg border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Action</th>
             </tr>
           </thead>
@@ -354,13 +253,39 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 ? "animate-green-blink"
                 : "animate-green-slide-out"
               : null;
+            const flowNorm = String(lead.flow ?? "").trim().toLowerCase();
+            const tagsNorm = String(lead.tags ?? "").trim();
+            const scheduleableTag = lead.tags === "No Answer" || lead.tags === "Busy IVR" || lead.tags === "Switch Off";
+            const incompleteNotConnected = flowNorm === "not connected" && scheduleableTag && !lead.callbackTime;
+            const isFresh =
+              (tagsNorm === "" && (flowNorm === "select" || flowNorm === "" || flowNorm === "connected")) ||
+              incompleteNotConnected;
             return (
             <tr
               key={lead.id}
               ref={(el) => {
                 rowRefs.current[lead.id] = el;
               }}
+              role={isFresh || lead.callbackTime ? "button" : undefined}
+              tabIndex={isFresh || lead.callbackTime ? 0 : undefined}
+              onClick={() => {
+                if (isFresh) setCallDialLead(lead);
+                else if (lead.callbackTime) setCallbackReminderLead(lead);
+              }}
+              onKeyDown={
+                isFresh || lead.callbackTime
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (isFresh) setCallDialLead(lead);
+                        else if (lead.callbackTime) setCallbackReminderLead(lead);
+                      }
+                    }
+                  : undefined
+              }
               className={`group transition-colors duration-150 ${
+                isFresh || lead.callbackTime ? "cursor-pointer " : ""
+              }${
                 exhaustRowClass ?? reviewRowClass ?? greenBucketRowClass ??
                   (shouldBlink
                     ? "animate-callback-blink hover:!bg-amber-100"
@@ -381,12 +306,16 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                         ? "bg-amber-50 group-hover:bg-amber-100"
                         : "bg-white group-hover:bg-slate-50"
                 }`}
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center gap-1">
                   <span>{lead.id.slice(0, 8)}</span>
                   <button
                     type="button"
-                    onClick={() => setDetailLead(lead)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailLead(lead);
+                    }}
                     className="shrink-0 rounded p-0.5 bg-blue-900 text-blue-100 transition-colors hover:bg-blue-800 hover:text-white"
                     title="View full details"
                     aria-label="View lead details"
@@ -413,31 +342,39 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 )}
               </td>
               <td className="overflow-hidden border-r-2 border-slate-200 px-2 py-1.5">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <FlowDropdown
-                    value={lead.flow}
-                    onChange={(v) => handleFlowChange(lead, v)}
-                    disabled={updating === lead.id}
-                  />
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  {!isFresh ? (
+                    <>
+                      <span
+                        className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium ${FLOW_COLORS[lead.flow] ?? "bg-neutral-100 text-neutral-700 border-neutral-300"}`}
+                      >
+                        {lead.flow}
+                      </span>
+                      <span
+                        className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium ${
+                          (() => {
+                            const displayTag =
+                              lead.flow === "Not Connected" &&
+                              (lead.tags === "WhatsApp No Reply" || lead.tags === "WhatsApp Not Available")
+                                ? "Incoming Off"
+                                : lead.tags;
+                            return displayTag ? (TAG_COLORS[displayTag] ?? "bg-neutral-100 text-neutral-700 border-neutral-300") : "bg-neutral-100 text-neutral-700 border-neutral-300";
+                          })()
+                        }`}
+                      >
+                        {lead.flow === "Not Connected" &&
+                        (lead.tags === "WhatsApp No Reply" || lead.tags === "WhatsApp Not Available")
+                          ? "Incoming Off"
+                          : lead.tags || "—"}
+                      </span>
+                    </>
+                  ) : null}
                   {lead.flow === "Not Connected" && isFollowupActive(lead) && (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
-                    >
+                    <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
                       <WhatsAppIcon className="h-3.5 w-3.5" />
                       WhatsApp Flow Active
-                    </button>
+                    </span>
                   )}
-                </div>
-              </td>
-              <td className="overflow-hidden border-r-2 border-slate-200 px-2 py-1.5">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <TagsDropdown
-                    value={lead.tags}
-                    flow={lead.flow}
-                    onChange={(v) => handleTagSelect(lead, v)}
-                    disabled={updating === lead.id}
-                  />
                   {lead.flow === "Not Connected" &&
                     (lead.tags === "WhatsApp No Reply" ||
                       lead.tags === "WhatsApp Not Available" ||
@@ -460,7 +397,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                     )}
                 </div>
               </td>
-              <td className="overflow-hidden border-r-2 border-slate-200 px-2 py-1.5">
+              <td className="overflow-hidden border-r-2 border-slate-200 px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                 {lead.tags === "Interested" && lead.note && (() => {
                   const actionPart = lead.note.split(" | ").find((p) => p.startsWith("Action: "));
                   const action = actionPart?.replace(/^Action:\s*/, "")?.trim();
@@ -524,18 +461,59 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           }}
         />
       )}
-      {callNowLead && (
-        <CallNowModal
-          lead={callNowLead}
-          onClose={() => setCallNowLead(null)}
+      {callDialLead && (
+        <CallDialModal
+          lead={callDialLead}
+          onClose={() => setCallDialLead(null)}
           onSuccess={onRefresh}
-          onConnectInterested={(lead) => {
-            setCallNowLead(null);
-            setInterestedLead(lead);
+          onConnectInterested={(l) => {
+            setCallDialLead(null);
+            setInterestedLead(l);
           }}
-          onConnectNotInterested={(lead) => {
+          onConnectNotInterested={(l) => {
+            setNotInterestedFrom("callDial");
+            setCallDialLead(null);
+            setNotInterestedLead(l);
+          }}
+          onInvalidNumber={(l) => {
+            setCallDialLead(null);
+            setInvalidLead(l);
+          }}
+        />
+      )}
+      {(callbackReminderLead || callNowLead) && (
+        <CallbackReminderModal
+          lead={callbackReminderLead ?? callNowLead!}
+          entryStep={
+            (() => {
+              const l = callbackReminderLead ?? callNowLead;
+              return l?.callbackTime && isBlinkTime(l.callbackTime) ? "callNow" : "reminder";
+            })()
+          }
+          onClose={() => {
+            setCallbackReminderLead(null);
             setCallNowLead(null);
-            setNotInterestedLead(lead);
+          }}
+          onSuccess={() => {
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            onRefresh();
+          }}
+          onConnectInterested={(l) => {
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            setInterestedLead(l);
+          }}
+          onConnectNotInterested={(l) => {
+            setNotInterestedFrom(callbackReminderLead ? "callbackReminder" : "callNow");
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            setNotInterestedLead(l);
+          }}
+          onInvalidNumber={(l) => {
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            setInvalidLead(l);
           }}
         />
       )}
@@ -586,7 +564,22 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           leadName={notInterestedLead.name}
           leadNumber={notInterestedLead.number}
           id={notInterestedLead.id}
-          onClose={() => setNotInterestedLead(null)}
+          onClose={() => {
+            setNotInterestedFrom(null);
+            setNotInterestedLead(null);
+          }}
+          onBack={
+            notInterestedFrom
+              ? () => {
+                  const lead = notInterestedLead;
+                  setNotInterestedLead(null);
+                  setNotInterestedFrom(null);
+                  if (lead && notInterestedFrom === "callDial") setCallDialLead(lead);
+                  if (lead && notInterestedFrom === "callNow") setCallNowLead(lead);
+                  if (lead && notInterestedFrom === "callbackReminder") setCallbackReminderLead(lead);
+                }
+              : undefined
+          }
           onConfirm={async (result) => {
             const isBudgetIssue = result.reason === "Budget issue" && result.budget && result.preferredCountry;
             if (isBudgetIssue) {

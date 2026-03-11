@@ -167,14 +167,14 @@ export function InterestedModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="w-full max-w-lg rounded-xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3 shrink-0">
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3 shrink-0">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
               <svg
@@ -195,13 +195,23 @@ export function InterestedModal({
               <h2 className="text-base font-semibold text-white">Interested / Connect</h2>
               <p className="text-xs text-slate-300">
                 {!passport
-                  ? "Client details collect karein"
+                  ? "Collect client details"
                   : isNoPassport
-                    ? "Lead Review mein jayegi"
-                    : "Form complete karein"}
+                    ? "Lead will go to Review"
+                    : "Complete the form"}
               </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-2 right-2 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto flex-1">
@@ -209,7 +219,7 @@ export function InterestedModal({
           {!passport && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 space-y-3">
               <p className="text-sm font-medium text-emerald-900">
-                Client ke paas passport hai?
+                Does the client have a passport?
               </p>
               <div className="flex gap-2">
                 <button
@@ -238,7 +248,7 @@ export function InterestedModal({
                 &ldquo;{NO_PASSPORT_SCRIPT}&rdquo;
               </p>
               <p className="text-xs text-amber-700 mt-2">
-                Confirm karne par lead Review bucket mein chali jayegi.
+                On confirm, the lead will move to the Review bucket.
               </p>
               <button
                 type="button"

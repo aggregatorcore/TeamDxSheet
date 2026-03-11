@@ -1,18 +1,24 @@
 "use client";
 
-import { useCountdown } from "@/hooks/useCountdown";
+import { useCountdown, COUNTDOWN_CALL_NOW, COUNTDOWN_OVERDUE } from "@/hooks/useCountdown";
 
 interface CallbackCountdownProps {
   callbackTime: string;
   isBlinking?: boolean;
 }
 
+function formatCallbackTimeLabel(callbackTime: string): string {
+  const ms = new Date(callbackTime.trim()).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  return new Date(ms).toLocaleString();
+}
+
 export function CallbackCountdown({ callbackTime, isBlinking }: CallbackCountdownProps) {
   const countdown = useCountdown(callbackTime);
 
-  const isCallNow = countdown === "Call Now";
-  const isOverdue = countdown === "Overdue";
-  const isCounting = !isCallNow && !isOverdue && countdown;
+  const isCallNow = countdown === COUNTDOWN_CALL_NOW;
+  const isOverdue = countdown === COUNTDOWN_OVERDUE;
+  const isCounting = !isCallNow && !isOverdue && countdown.length > 0;
 
   return (
     <div className="flex flex-col gap-0">
@@ -27,11 +33,11 @@ export function CallbackCountdown({ callbackTime, isBlinking }: CallbackCountdow
             isBlinking ? "text-amber-800" : isCallNow ? "text-amber-700" : isOverdue ? "text-red-700" : "text-neutral-700"
           }`}
         >
-          {countdown || "..."}
+          {countdown || "—"}
         </span>
       </div>
       <span className="text-[10px] text-neutral-500">
-        {new Date(callbackTime).toLocaleString()}
+        {formatCallbackTimeLabel(callbackTime)}
       </span>
     </div>
   );

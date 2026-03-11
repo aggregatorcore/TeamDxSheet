@@ -1,12 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Admin client - bypasses RLS. Use only for trusted server operations. */
-export function createAdminClient() {
+export function createAdminClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  return createSupabaseClient(url, key);
+}
+
+/** Returns admin client or null if SERVICE_ROLE_KEY is missing (safe fallback). */
+export function tryCreateAdminClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
   return createSupabaseClient(url, key);
 }
 

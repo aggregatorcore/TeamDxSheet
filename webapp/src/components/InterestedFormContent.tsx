@@ -297,7 +297,7 @@ export function InterestedFormContent({
       )}
 
       <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
-        <p className="text-xs font-medium text-slate-700">Pehle India se bahar travel kiya?</p>
+        <p className="text-xs font-medium text-slate-700">Travelled outside India before?</p>
         <div className="flex gap-2">
           <button
             type="button"
@@ -332,7 +332,7 @@ export function InterestedFormContent({
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-700">
-                Kitni country main travel kiya hai?
+                How many countries have you travelled to?
               </label>
               <select
                 value={v.prevTravelCount}

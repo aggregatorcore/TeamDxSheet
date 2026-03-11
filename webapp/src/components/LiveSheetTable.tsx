@@ -401,14 +401,14 @@ export function LiveSheetTable() {
                                     {lead.category === "overdue" ? "Overdue" : lead.tags || "—"}
                                   </span>
                                 </td>
-                                <td className="px-2 py-1.5">
+                                <td className="border-r-2 border-slate-200 px-2 py-1.5">
                                   {lead.callbackTime ? (
                                     <CallbackCountdown
                                       callbackTime={lead.callbackTime}
                                       isBlinking={isBlinkTime(lead.callbackTime)}
                                     />
                                   ) : (
-                                    <span className="text-neutral-500">—</span>
+                                    <span className="text-neutral-400 text-xs" title="No callback scheduled">No callback</span>
                                   )}
                                 </td>
                               </tr>

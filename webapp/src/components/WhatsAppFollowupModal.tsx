@@ -88,13 +88,13 @@ export function WhatsAppFollowupModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -106,6 +106,16 @@ export function WhatsAppFollowupModal({
               <p className="text-xs text-slate-300">{leadName} • {number}</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-2 right-2 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">

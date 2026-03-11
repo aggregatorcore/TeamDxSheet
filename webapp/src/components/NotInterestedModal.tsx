@@ -24,6 +24,8 @@ interface NotInterestedModalProps {
   leadNumber: string;
   id: string;
   onClose: () => void;
+  /** Called when user clicks Back – parent should close this modal and reopen the previous one (e.g. CallDialModal). */
+  onBack?: () => void;
   onConfirm: (result: NotInterestedResult) => Promise<void>;
 }
 
@@ -31,6 +33,7 @@ export function NotInterestedModal({
   leadName,
   leadNumber,
   onClose,
+  onBack,
   onConfirm,
 }: NotInterestedModalProps) {
   const [loading, setLoading] = useState(false);
@@ -126,14 +129,14 @@ export function NotInterestedModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,6 +148,16 @@ export function NotInterestedModal({
               <p className="text-xs text-slate-300">Lead will move to Review</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-2 right-2 rounded p-1.5 bg-red-500 text-white hover:bg-red-600 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
@@ -156,17 +169,23 @@ export function NotInterestedModal({
 
           {/* Reason selection */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-700">Reason</label>
-            <select
-              value={selectedReason}
-              onChange={(e) => handleReasonChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
-            >
-              <option value="">Select reason</option>
+            <p className="mb-2 text-xs font-medium text-slate-700">Reason</p>
+            <div className="flex flex-wrap gap-2">
               {NOT_INTERESTED_REASONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => handleReasonChange(r)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    selectedReason === r
+                      ? "border-slate-500 bg-slate-200 text-slate-900 ring-2 ring-slate-500/30"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  {r}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Already applied - optional details */}
@@ -388,11 +407,10 @@ export function NotInterestedModal({
           <div className="flex gap-2 pt-0">
             <button
               type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-colors"
+              onClick={() => (onBack ? onBack() : onClose())}
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
             >
-              Cancel
+              Back
             </button>
             <button
               type="button"

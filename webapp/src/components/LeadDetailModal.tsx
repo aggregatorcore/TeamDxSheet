@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Lead, FlowOption } from "@/types/lead";
 import { getTagHistory } from "@/lib/leadNote";
 import { FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
@@ -218,10 +218,24 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<InterestedFormValues>(defaultEditFormValues);
+  const [isMobileOrTelCapable, setIsMobileOrTelCapable] = useState(true);
 
   useEffect(() => {
     setTab(initialTab);
   }, [lead.id, initialTab]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const check = () => setIsMobileOrTelCapable(mq.matches);
+    check();
+    mq.addEventListener("change", check);
+    return () => mq.removeEventListener("change", check);
+  }, []);
+
+  const copyPhone = useCallback(() => {
+    const num = lead.number?.replace(/\s/g, "").split(",")[0];
+    if (num) navigator.clipboard.writeText(num).catch(() => {});
+  }, [lead.number]);
 
   const parsed = lead.note ? parseNote(lead.note) : {};
   const targetCountry = parsed["Target"]?.includes(", Visa:")
@@ -306,7 +320,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm transition-opacity"
-      onClick={onClose}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
@@ -378,7 +392,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                className="rounded-lg p-1.5 bg-red-500 text-white transition-colors hover:bg-red-600"
                 aria-label="Close"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -451,16 +465,30 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                       </div>
                       <Field label="Place" value={lead.place || parsed["Place"]} />
                       {lead.number ? (
-                        <a
-                          href={`tel:${lead.number.replace(/\s/g, "").split(",")[0]}`}
-                          className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 transition-all duration-200 hover:bg-sky-100 hover:shadow-sm"
-                        >
-                          <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Phone:</span>
-                          <span className="text-base font-semibold text-sky-600">{lead.number}</span>
-                          <svg className="ml-auto h-4 w-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                        </a>
+                        isMobileOrTelCapable ? (
+                          <a
+                            href={`tel:${lead.number.replace(/\s/g, "").split(",")[0]}`}
+                            className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 transition-all duration-200 hover:bg-sky-100 hover:shadow-sm"
+                          >
+                            <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Phone:</span>
+                            <span className="text-base font-semibold text-sky-600">{lead.number}</span>
+                            <svg className="ml-auto h-4 w-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2">
+                            <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">Phone:</span>
+                            <span className="text-base font-semibold text-sky-600 flex-1 min-w-0 truncate">{lead.number}</span>
+                            <button
+                              type="button"
+                              onClick={copyPhone}
+                              className="shrink-0 rounded px-2 py-1 text-sm font-medium text-sky-600 hover:bg-sky-100"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        )
                       ) : (
                         <Field label="Phone" value={undefined} />
                       )}
