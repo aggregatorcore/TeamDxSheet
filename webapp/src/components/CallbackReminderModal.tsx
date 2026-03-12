@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import type { Lead, TagOption } from "@/types/lead";
 import { TAGS_FOR_CONNECTED, TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
+import { localDateTimeToISO } from "@/lib/dateUtils";
+import { useAppTimezone } from "@/components/AppTimezoneProvider";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const QUICK_PRESETS = [
@@ -84,6 +86,7 @@ export function CallbackReminderModal({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { utcOffsetMinutes } = useAppTimezone();
 
   const now = new Date();
   const today = formatDateForInput(now);
@@ -148,7 +151,7 @@ export function CallbackReminderModal({
     }
     setLoading(true);
     setError(null);
-    const callbackTime = `${date}T${time}:00`;
+    const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
     const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);

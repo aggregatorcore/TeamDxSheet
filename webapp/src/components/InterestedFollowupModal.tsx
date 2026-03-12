@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
+import { localDateTimeToISO } from "@/lib/dateUtils";
+import { useAppTimezone } from "@/components/AppTimezoneProvider";
 import { WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
 import type { Lead } from "@/types/lead";
 
@@ -63,6 +65,7 @@ export function InterestedFollowupModal({
     const d = new Date(Date.now() + 60 * 60 * 1000);
     return formatTimeForInput(d);
   });
+  const { utcOffsetMinutes } = useAppTimezone();
   const now = new Date();
   const today = formatDateForInput(now);
 
@@ -97,7 +100,7 @@ export function InterestedFollowupModal({
     if (!scheduleReason || !scheduleDate || !scheduleTime) return;
     setScheduling(true);
     setError(null);
-    const callbackTime = `${scheduleDate}T${scheduleTime}:00`;
+    const callbackTime = localDateTimeToISO(scheduleDate, scheduleTime, utcOffsetMinutes);
     const actionNote = `Action: ${scheduleReason}`;
     const newNote = lead.note ? `${lead.note} | ${actionNote}` : actionNote;
     const res = await fetch("/api/leads", {

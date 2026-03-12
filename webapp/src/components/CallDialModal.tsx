@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import type { Lead, TagOption } from "@/types/lead";
 import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
+import { localDateTimeToISO } from "@/lib/dateUtils";
+import { useAppTimezone } from "@/components/AppTimezoneProvider";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 
 const QUICK_PRESETS = [
@@ -76,6 +78,7 @@ export function CallDialModal({
   const [step, setStep] = useState<Step>("dial");
   const [tag, setTag] = useState<TagOption | "">("");
   const [showNotInterestedSubChoice, setShowNotInterestedSubChoice] = useState(false);
+  const { utcOffsetMinutes } = useAppTimezone();
   const [date, setDate] = useState(() => {
     const d = new Date(Date.now() + 30 * 60 * 1000);
     return formatDateForInput(d);
@@ -243,7 +246,7 @@ export function CallDialModal({
     }
     setLoading(true);
     setError(null);
-    const callbackTime = `${date}T${time}:00`;
+    const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
     const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);

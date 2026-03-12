@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ToastProvider";
+import { AppTimezoneProvider } from "@/components/AppTimezoneProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -35,7 +36,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased font-sans`}
       >
-        <ToastProvider>{children}</ToastProvider>
+        <AppTimezoneProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AppTimezoneProvider>
       </body>
     </html>
   );

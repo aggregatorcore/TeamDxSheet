@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { localDateTimeToISO } from "@/lib/dateUtils";
+import { useAppTimezone } from "@/components/AppTimezoneProvider";
 
 interface CallbackModalProps {
   leadName: string;
@@ -53,6 +55,7 @@ export function CallbackModal({
     const d = new Date(Date.now() + 30 * 60 * 1000);
     return formatTimeForInput(d);
   });
+  const { utcOffsetMinutes } = useAppTimezone();
   const now = new Date();
   const today = formatDateForInput(now);
   const [loading, setLoading] = useState(false);
@@ -78,7 +81,7 @@ export function CallbackModal({
     if (!date || !time) return;
     setLoading(true);
     setError(null);
-    const callbackTime = `${date}T${time}:00`;
+    const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
     const res = await fetch("/api/callbacks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
