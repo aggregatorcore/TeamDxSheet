@@ -16,6 +16,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Install as desktop app (PWA)
+
+The app is a Progressive Web App (PWA). You can install it on your desktop or phone so it runs like a native app (own window, no browser UI).
+
+- **Chrome / Edge (desktop):** Open the app in the browser → click the **Install** icon (⊕ or “Install app”) in the address bar, or use the three-dots menu → “Install TeamDX Lead Manager”.
+- **macOS Safari:** File → “Add to Dock”.
+- **Windows:** Use Chrome or Edge and install from the address bar; the app will appear in the Start menu.
+
+Requires HTTPS in production (e.g. on Render). The app works offline for previously visited pages.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

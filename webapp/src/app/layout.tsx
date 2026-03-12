@@ -16,6 +16,13 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "TeamDX Lead Manager",
   description: "Telecaller lead management with callbacks and WhatsApp flow",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TeamDX",
+  },
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({
