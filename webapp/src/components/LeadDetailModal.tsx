@@ -105,7 +105,7 @@ function getOverdueDuration(callbackTime: string): string {
 }
 
 /** Build timeline: Lead created (assigned to + timestamp), then each cycle (Start → Dial → Not connected → Tag → Callback schedule → Cycle closed), cycle name. */
-function getTimelineItems(lead: Lead, _action: string | undefined): TimelineItem[] {
+function getTimelineItems(lead: Lead): TimelineItem[] {
   const items: TimelineItem[] = [];
 
   if (lead.createdAt) {
@@ -369,7 +369,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
 
   const action = parsed["Action"];
   const userNotes = getUserNotes(lead.note);
-  const timelineItems = getTimelineItems(lead, action);
+  const timelineItems = getTimelineItems(lead);
 
   return (
     <div
