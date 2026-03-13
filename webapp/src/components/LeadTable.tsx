@@ -461,11 +461,13 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                           <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS["Incoming Off"]}`}>
                             Incoming Off
                           </span>
-                          <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden title="Collaborate">
-                            <circle cx="6" cy="12" r="2" strokeWidth={2} />
-                            <circle cx="18" cy="12" r="2" strokeWidth={2} />
-                            <path strokeLinecap="round" strokeWidth={2} d="M8 12h8" />
-                          </svg>
+                          <span title="Collaborate" className="shrink-0 inline-flex">
+                            <svg className="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                              <circle cx="6" cy="12" r="2" strokeWidth={2} />
+                              <circle cx="18" cy="12" r="2" strokeWidth={2} />
+                              <path strokeLinecap="round" strokeWidth={2} d="M8 12h8" />
+                            </svg>
+                          </span>
                           <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS["WhatsApp Flow Active"]}`}>
                             <WhatsAppIcon className="h-3.5 w-3.5" />
                             WhatsApp Flow Active
