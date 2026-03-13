@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { BUCKET_LABELS } from "@/lib/constants";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 
 export type { NotInterestedResult } from "./NotInterestedFormContent";
@@ -62,7 +63,7 @@ export function NotInterestedModal({
             </div>
             <div>
               <h2 className="text-base font-semibold text-white">Not Interested</h2>
-              <p className="text-xs text-slate-300">Lead will move to Review</p>
+              <p className="text-xs text-slate-300">Lead will move to {BUCKET_LABELS.review}</p>
             </div>
           </div>
           <button

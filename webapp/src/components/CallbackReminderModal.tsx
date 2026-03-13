@@ -6,6 +6,7 @@ import { TAGS_FOR_CONNECTED, TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
+import { ACTION_NOTE_PREFIX, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const QUICK_PRESETS = [
@@ -35,18 +36,19 @@ function formatTimeForInput(d: Date) {
   return d.toTimeString().slice(0, 5);
 }
 
-function getNextAttempt(prevNote: string | undefined, newTag: TagOption): number {
+/** One complete flow cycle = 1 attempt. Next attempt = last cycle count + 1 (same as CallDialModal). */
+function getNextAttempt(prevNote: string | undefined, _newTag: TagOption): number {
   if (!prevNote) return 1;
   const parts = prevNote.split(" | ");
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*(.+)$/);
+  let maxNum = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*.+$/);
     if (m) {
-      const prevTag = m[2].trim();
-      if (prevTag === newTag) return parseInt(m[1], 10) + 1;
-      return 1;
+      const n = parseInt(m[1], 10);
+      if (n > maxNum) maxNum = n;
     }
   }
-  return 1;
+  return maxNum + 1;
 }
 
 export interface CallbackReminderModalProps {
@@ -155,7 +157,10 @@ export function CallbackReminderModal({
     const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
-    const newNote = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+    const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+    const callbackDateStr = new Date(callbackTime).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+    const actionNote = `${ACTION_NOTE_PREFIX}Callback scheduled for ${callbackDateStr}`;
+    const newNote = noteWithAttempt ? `${noteWithAttempt} | ${actionNote}` : actionNote;
 
     const res = await fetch("/api/leads", {
       method: "PATCH",
@@ -229,24 +234,22 @@ export function CallbackReminderModal({
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
           {step === "reminder" && (
             <>
-              <p className="mb-4 text-sm font-medium text-neutral-700">
-                Wait – call this lead after{" "}
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 ring-1 ring-amber-300">
-                  {countdown || "—"}
-                </span>
-              </p>
-              <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
+              <p className="text-sm font-medium text-neutral-700">Wait – call this lead after</p>
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2 text-sm">
+                <p><span className="font-medium text-neutral-500">Time left: </span><span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 ring-1 ring-amber-300">{countdown || "—"}</span></p>
+              </div>
+              <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg border border-amber-500 bg-amber-50 px-4 py-2.5 font-medium text-amber-800 hover:bg-amber-100"
+                  className="rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-700 hover:bg-neutral-50"
                 >
                   OK
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep("result")}
-                  className="rounded-lg bg-amber-600 px-4 py-2.5 font-medium text-white hover:bg-amber-700"
+                  className="flex-1 min-w-0 rounded-lg bg-amber-600 px-4 py-2.5 font-medium text-white hover:bg-amber-700"
                 >
                   Client callback received
                 </button>
@@ -312,22 +315,22 @@ export function CallbackReminderModal({
 
           {step === "connected" && (
             <>
-              <p className="mb-4 text-sm font-medium text-neutral-700">Interested or Not Interested?</p>
-              <div className="flex gap-3">
-                {TAGS_FOR_CONNECTED.filter((t) => t === "Interested" || t === "Not Interested").map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => handleConnectedChoice(t as "Interested" | "Not Interested")}
-                    className={`flex-1 rounded-lg px-4 py-2.5 font-medium ${
-                      t === "Interested"
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "border border-slate-300 bg-slate-50 text-slate-800 hover:bg-slate-100"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+              <p className="mb-2 text-xs font-medium text-slate-700">Interested or Not Interested?</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleConnectedChoice("Interested")}
+                  className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                >
+                  Interested
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConnectedChoice("Not Interested")}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                >
+                  Not Interested
+                </button>
               </div>
             </>
           )}
@@ -402,7 +405,7 @@ export function CallbackReminderModal({
           {step === "schedule" && (
             <>
               <p className="mb-2 text-sm font-medium text-neutral-700">
-                Schedule callback <span className="text-amber-700">({tag})</span>
+                {SCHEDULE_CALLBACK_LABEL} <span className="text-amber-700">({tag})</span>
               </p>
               <div className="mb-3 flex flex-wrap gap-2">
                 {QUICK_PRESETS.map((p) => (

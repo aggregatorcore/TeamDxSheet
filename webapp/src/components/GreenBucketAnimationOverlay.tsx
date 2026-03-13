@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BUCKET_LABELS } from "@/lib/constants";
 import { ColorBadge } from "./ColorBadge";
 import type { TagOption } from "@/types/lead";
 
@@ -43,7 +44,7 @@ export function GreenBucketAnimationOverlay({
         <div
           className={`flex flex-col items-center gap-2 rounded-xl border-2 border-emerald-400 bg-emerald-50 px-6 py-4 shadow-xl ${animate ? "animate-green-bucket-hide" : ""}`}
         >
-          <span className="text-lg font-bold text-emerald-800">Green Bucket</span>
+          <span className="text-lg font-bold text-emerald-800">{BUCKET_LABELS.green} Bucket</span>
           <svg
             className="h-10 w-10 text-emerald-600"
             fill="none"

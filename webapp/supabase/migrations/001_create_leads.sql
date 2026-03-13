@@ -6,7 +6,7 @@ create table if not exists public.leads (
   name text default '',
   place text default '',
   number text default '',
-  flow text default 'Select' check (flow in ('Select', 'Connected', 'Not Connected')),
+  flow text default 'Not Connected' check (flow in ('Connected', 'Not Connected')),
   tags text default '',
   callback_time timestamptz,
   assigned_to text not null,

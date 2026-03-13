@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
 import { useToast } from "@/hooks/useToast";
+import { getEffectiveTag } from "@/lib/leadNote";
 import type { Lead } from "@/types/lead";
 
 interface AdminLeadsTableProps {
@@ -129,7 +130,7 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
                 </td>
                 <td className={`overflow-hidden border-r-2 ${borderColor} px-2 py-1.5`}>
                   <span className="inline-flex rounded-lg border px-2 py-0.5 text-xs font-medium text-neutral-700">
-                    {lead.tags || "—"}
+                    {getEffectiveTag(lead.note, lead.tags) || "—"}
                   </span>
                 </td>
                 <td className={`overflow-hidden border-r-2 ${borderColor} px-2 py-1.5`}>

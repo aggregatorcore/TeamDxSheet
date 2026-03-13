@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { NO_PASSPORT_SCRIPT } from "@/lib/constants";
+import { ACTION_LABELS, BUCKET_LABELS, NO_PASSPORT_SCRIPT } from "@/lib/constants";
 import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
 
 const defaultFormValues: InterestedFormValues = {
@@ -202,7 +202,7 @@ export function InterestedModal({
                 {!passport
                   ? "Collect client details"
                   : isNoPassport
-                    ? "Lead will go to Review"
+                    ? `Lead will go to ${BUCKET_LABELS.review}`
                     : "Complete the form"}
               </p>
             </div>
@@ -253,7 +253,7 @@ export function InterestedModal({
                 &ldquo;{NO_PASSPORT_SCRIPT}&rdquo;
               </p>
               <p className="text-xs text-amber-700 mt-2">
-                On confirm, the lead will move to the Review bucket.
+                On confirm, the lead will move to the {BUCKET_LABELS.review} bucket.
               </p>
               <button
                 type="button"
@@ -311,7 +311,7 @@ export function InterestedModal({
             {loading
               ? "Saving..."
               : isNoPassport
-                ? "Move to Review"
+                ? ACTION_LABELS.move_review
                 : "Save & Connect"}
           </button>
         </div>

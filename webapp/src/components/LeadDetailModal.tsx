@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import type { Lead, FlowOption } from "@/types/lead";
+import { TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
 import { getTagHistory } from "@/lib/leadNote";
-import { FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, FLOW_COLORS, SCHEDULE_CALLBACK_LABEL, TAG_COLORS } from "@/lib/constants";
 import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
 
 interface LeadDetailModalProps {
@@ -11,6 +12,8 @@ interface LeadDetailModalProps {
   onClose: () => void;
   initialTab?: "overview" | "timeline" | "documents";
   onUpdate?: (updates: Partial<Lead>) => void;
+  /** When provided, shows "Schedule callback" in Callback / Schedule section for Not Connected leads (No Answer, Switch Off, Busy IVR). Called with lead then modal closes. */
+  onScheduleCallback?: (lead: Lead) => void;
 }
 
 /** Parse note string into key-value pairs */
@@ -66,59 +69,107 @@ function inferFlowFromTag(tag: string): FlowOption {
   return "Not Connected";
 }
 
-type TimelineCycle = {
-  type: "cycle";
-  flow: FlowOption;
-  tag: string;
-  action?: string;
-  date?: string;
-} | {
-  type: "event";
-  label: string;
-  date?: string;
-};
+type TimelineItem =
+  | { type: "lead_created"; assignedTo: string; date: string }
+  | {
+      type: "cycle";
+      cycleName: string;
+      date?: string;
+      steps: string[];
+      callbackSchedule?: string;
+      totalHours?: string;
+      /** True when a later tag was applied (same or other). Cycle stays open until then. */
+      cycleClosed: boolean;
+      /** Cycle count (Attempt N). Same tag again = count 2; different tag = previous cycle closed, new cycle. */
+      attemptNumber?: number;
+    };
 
-/** Build timeline as cycles: Flow → Tag → Action. Newest first. */
-function getTimelineCycles(note: string | undefined, lead: Lead, action: string | undefined): TimelineCycle[] {
-  const cycles: TimelineCycle[] = [];
-  const tagHistory = getTagHistory(note);
-  const attemptHistory = getAttemptHistory(note);
+/** Format total hours from now to callback (e.g. "2h 30m") or return — if past. */
+function getTotalHoursToCallback(callbackTime: string): string {
+  const cb = new Date(callbackTime).getTime();
+  const now = Date.now();
+  if (cb <= now) return "—";
+  const ms = cb - now;
+  const h = Math.floor(ms / (60 * 60 * 1000));
+  const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
 
+/** When callback time is past, return duration since then (e.g. "2h 30m ago"). */
+function getOverdueDuration(callbackTime: string): string {
+  const cb = new Date(callbackTime).getTime();
+  const now = Date.now();
+  if (cb > now) return "";
+  const ms = now - cb;
+  const h = Math.floor(ms / (60 * 60 * 1000));
+  const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+  if (h > 0 && m > 0) return `${h}h ${m}m ago`;
+  if (h > 0) return `${h}h ago`;
+  return `${m}m ago`;
+}
+
+/** Build timeline: Lead created (assigned to + timestamp), then each cycle (Start → Dial → Not connected → Tag → Callback schedule → Cycle closed), cycle name. */
+function getTimelineItems(lead: Lead, action: string | undefined): TimelineItem[] {
+  const items: TimelineItem[] = [];
+
+  if (lead.createdAt) {
+    const d = new Date(lead.createdAt);
+    items.push({
+      type: "lead_created",
+      assignedTo: lead.assignedTo,
+      date: d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+    });
+  }
+
+  const tagHistory = getTagHistory(lead.note);
+  const attemptHistory = getAttemptHistory(lead.note);
+
+  const cycles: { tag: string; date?: string }[] = [];
   for (const entry of tagHistory) {
     const match = entry.match(/^(.+?)\s*\(([^)]+)\)$/);
     const tag = match ? match[1].trim() : entry;
     const date = match ? match[2] : undefined;
-    const flow = inferFlowFromTag(tag);
-    const isInterested = tag === "Interested";
-    cycles.push({
-      type: "cycle",
-      flow,
-      tag,
-      action: isInterested ? action : undefined,
-      date,
-    });
+    cycles.push({ tag, date });
   }
-
   if (cycles.length === 0 && attemptHistory.length > 0) {
     for (const a of attemptHistory) {
       const tag = a.replace(/^Attempt\s+\d+:\s*/, "").trim();
-      cycles.push({
-        type: "cycle",
-        flow: inferFlowFromTag(tag),
-        tag,
-      });
+      cycles.push({ tag });
     }
   }
 
-  if (lead.callbackTime) {
-    cycles.push({
-      type: "event",
-      label: "Callback scheduled",
-      date: new Date(lead.callbackTime).toLocaleString("en-IN"),
+  const callbackDateStr = lead.callbackTime
+    ? new Date(lead.callbackTime).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+    : undefined;
+  const totalHours = lead.callbackTime ? getTotalHoursToCallback(lead.callbackTime) : undefined;
+
+  /** Cycle closed only when a tag is applied again (same or other). See cycle rule in @/lib/constants. */
+  for (let i = 0; i < cycles.length; i++) {
+    const { tag, date } = cycles[i];
+    const isLast = i === cycles.length - 1;
+    const cycleClosed = !isLast;
+    const attemptNum = attemptHistory[i]?.match(/^Attempt\s+(\d+):/)?.[1] ?? String(i + 1);
+    const steps: string[] = ["Start cycle", "Dial", "Not connected", tag];
+    if (isLast && lead.callbackTime) {
+      steps.push(`Callback schedule – ${callbackDateStr} – ${totalHours !== "—" ? `in ${totalHours}` : "overdue"}`);
+    }
+    if (cycleClosed) steps.push("Cycle closed");
+
+    items.push({
+      type: "cycle",
+      cycleName: tag,
+      date,
+      steps,
+      callbackSchedule: isLast && lead.callbackTime ? `${callbackDateStr}${totalHours && totalHours !== "—" ? ` (in ${totalHours})` : ""}` : undefined,
+      totalHours: isLast && lead.callbackTime ? totalHours : undefined,
+      cycleClosed,
+      attemptNumber: attemptNum ? parseInt(attemptNum, 10) : undefined,
     });
   }
 
-  return cycles.reverse();
+  return items;
 }
 
 const PLACEHOLDER = "—";
@@ -186,7 +237,7 @@ function buildNoteFromFormValues(form: InterestedFormValues, existingNote: strin
   if (form.hasRejection === "yes" && (form.rejectionCountry?.trim() || form.rejectionReason?.trim())) {
     parts.push(`Rejection: ${form.rejectionCountry?.trim() || "-"} - ${form.rejectionReason?.trim() || "-"}`);
   }
-  if (form.action?.trim()) parts.push(`Action: ${form.action.trim()}`);
+  if (form.action?.trim()) parts.push(`${ACTION_NOTE_PREFIX}${form.action.trim()}`);
   if (form.passport === "yes" || form.passport === "no") parts.push(`Passport: ${form.passport}`);
   const base = parts.join(" | ");
   const tagHistoryPart = existingNote?.split(" | ").find((p) => p.startsWith("TagHistory:"));
@@ -213,8 +264,9 @@ const defaultEditFormValues: InterestedFormValues = {
   passport: "",
 };
 
-export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpdate }: LeadDetailModalProps) {
+export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpdate, onScheduleCallback }: LeadDetailModalProps) {
   const [tab, setTab] = useState<"overview" | "timeline" | "documents">(initialTab);
+  const [expandedTimelineIndex, setExpandedTimelineIndex] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<InterestedFormValues>(defaultEditFormValues);
@@ -231,6 +283,14 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
     mq.addEventListener("change", check);
     return () => mq.removeEventListener("change", check);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const copyPhone = useCallback(() => {
     const num = lead.number?.replace(/\s/g, "").split(",")[0];
@@ -315,7 +375,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
 
   const action = parsed["Action"];
   const userNotes = getUserNotes(lead.note);
-  const timelineCycles = getTimelineCycles(lead.note, lead, action);
+  const timelineItems = getTimelineItems(lead, action);
 
   return (
     <div
@@ -333,6 +393,16 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
         <div className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+                aria-label="Back"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20">
                 <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -579,7 +649,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
 
                 {/* Callback / Schedule for Not Connected (No Answer, Switch Off, Busy IVR) */}
                 {lead.flow === "Not Connected" &&
-                  (lead.tags === "No Answer" || lead.tags === "Switch Off" || lead.tags === "Busy IVR") && (
+                  lead.tags !== "" && TAGS_SCHEDULEABLE_CALLBACK.includes(lead.tags) && (
                   <div className="border-t border-slate-100 pt-5">
                     <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
@@ -601,6 +671,18 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                       }
                       placeholder="Not scheduled — schedule from lead table"
                     />
+                    {onScheduleCallback && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onScheduleCallback(lead);
+                          onClose();
+                        }}
+                        className="mt-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 transition-colors"
+                      >
+                        {SCHEDULE_CALLBACK_LABEL}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -655,7 +737,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
           )}
 
           {tab === "timeline" && (
-            <div className="max-w-2xl">
+            <div className="max-w-4xl">
               <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -665,68 +747,187 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                   </span>
                   Timeline
                 </h3>
-                {timelineCycles.length > 0 ? (
-                  <div className="relative space-y-4">
-                    {/* Vertical connector line */}
-                    <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-200" />
-                    {timelineCycles.map((cycle, i) => (
-                      <div
-                        key={i}
-                        className={`relative flex flex-col gap-2 rounded-xl border p-4 transition-all duration-200 ${
-                          i === 0
-                            ? "border-slate-300 bg-slate-50 ring-1 ring-slate-200/80"
-                            : "border-slate-200 bg-white hover:bg-slate-50/50"
-                        }`}
-                      >
-                        {i === 0 && (
-                          <span className="absolute -top-2 left-4 rounded bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
-                            Latest
-                          </span>
-                        )}
-                        {cycle.type === "cycle" ? (
-                          <>
-                            {/* Cycle: Flow → Tag → Action */}
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-medium ${
-                                  FLOW_COLORS[cycle.flow] ?? "bg-slate-100 text-slate-700 border-slate-300"
-                                }`}
+                {timelineItems.length > 0 ? (
+                  <div className="relative" style={{ minHeight: timelineItems.length * 72 }}>
+                    {/* Progress bar track (vertical) */}
+                    <div
+                      className="absolute left-[11px] top-3 bottom-3 w-1 rounded-full bg-slate-200"
+                      aria-hidden
+                    />
+                    {/* Filled progress up to last node */}
+                    <div
+                      className="absolute left-[11px] top-3 w-1 rounded-full bg-emerald-500 transition-all duration-300"
+                      style={{
+                        height: timelineItems.length <= 1 ? "0.5rem" : `calc(${((timelineItems.length - 1) / timelineItems.length) * 100}% + 0.5rem)`,
+                      }}
+                      aria-hidden
+                    />
+                    {timelineItems.map((item, i) => (
+                      <div key={i} className="relative flex gap-4 pb-6 last:pb-0">
+                        {/* Node */}
+                        <div
+                          className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                            i === 0
+                              ? "border-emerald-500 bg-emerald-500"
+                              : item.type === "cycle" && !item.cycleClosed
+                                ? "border-amber-500 bg-amber-100"
+                                : "border-slate-400 bg-white"
+                          }`}
+                        >
+                          {i > 0 && (
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                i === 0
+                                  ? "bg-white"
+                                  : item.type === "cycle" && !item.cycleClosed
+                                    ? "bg-amber-600"
+                                    : "bg-slate-500"
+                              }`}
+                            />
+                          )}
+                          {i === 0 && (
+                            <svg className="h-3.5 w-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        {/* Content */}
+                        <div
+                          className={`min-w-0 flex-1 rounded-lg border px-3 py-2.5 ${
+                            i === 0
+                              ? "border-emerald-200 bg-emerald-50/80"
+                              : "border-slate-200 bg-white"
+                          }`}
+                        >
+                          {item.type === "lead_created" ? (
+                            <>
+                              <p className="font-medium text-slate-800">Lead created</p>
+                              <p className="text-sm text-slate-600">Assigned to {item.assignedTo}</p>
+                              <p className="text-xs text-slate-500">{item.date}</p>
+                            </>
+                          ) : (
+                            <div className="space-y-0">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTimelineIndex((prev) => (prev === i ? null : i))}
+                                className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
                               >
-                                {cycle.flow}
-                              </span>
-                              <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                              </svg>
-                              <span
-                                className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-medium ${
-                                  TAG_COLORS[cycle.tag as keyof typeof TAG_COLORS] ?? "bg-slate-100 text-slate-700 border-slate-300"
-                                }`}
-                              >
-                                {cycle.tag}
-                              </span>
-                              {cycle.action && (
-                                <>
-                                  <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                                  </svg>
-                                  <span className="inline-flex max-w-sm rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
-                                    {cycle.action}
+                                <div>
+                                  <p className="font-medium text-slate-800">Cycle {item.cycleName === CYCLE_NAME_WHATSAPP ? "WhatsApp cycle" : item.cycleName}</p>
+                                  {item.date && (
+                                    <p className="text-xs text-slate-500">{item.date}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {item.attemptNumber != null && (
+                                    <span className="text-xs font-medium text-slate-600">
+                                      Count: {item.attemptNumber}
+                                    </span>
+                                  )}
+                                  {i === timelineItems.length - 1 && (
+                                    <span className="rounded bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+                                      Latest
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                      item.cycleClosed
+                                        ? "bg-slate-200 text-slate-700"
+                                        : "bg-amber-100 text-amber-800"
+                                    }`}
+                                  >
+                                    {item.cycleClosed ? "Closed" : "Open"}
                                   </span>
-                                </>
+                                  <svg
+                                    className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${
+                                      expandedTimelineIndex === i ? "rotate-180" : ""
+                                    }`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </button>
+                              {expandedTimelineIndex === i && (
+                                <div className="mt-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                    Flow steps
+                                  </p>
+                                  {/* Stepper: numbered pills with arrows */}
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    {item.steps.map((step, j) => {
+                                      const short =
+                                        step === "Start cycle"
+                                          ? "Start"
+                                          : step === "Cycle closed"
+                                            ? "Closed"
+                                            : step.startsWith("Callback schedule")
+                                              ? "Schedule"
+                                              : step === CYCLE_NAME_WHATSAPP
+                                                ? "WhatsApp cycle"
+                                                : step;
+                                      const isLast = j === item.steps.length - 1;
+                                      const done = item.cycleClosed || !isLast;
+                                      return (
+                                        <Fragment key={j}>
+                                          <span
+                                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold shadow-sm ${
+                                              done
+                                                ? "bg-emerald-500 text-white"
+                                                : "border-2 border-amber-400 bg-amber-50 text-amber-800"
+                                            }`}
+                                            title={step}
+                                          >
+                                            <span
+                                              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
+                                                done ? "bg-emerald-400 text-white" : "bg-amber-200 text-amber-900"
+                                              }`}
+                                            >
+                                              {j + 1}
+                                            </span>
+                                            {short}
+                                          </span>
+                                          {!isLast && (
+                                            <svg
+                                              className="h-4 w-4 shrink-0 text-slate-400"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              strokeWidth={2.5}
+                                              viewBox="0 0 24 24"
+                                              aria-hidden
+                                            >
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                            </svg>
+                                          )}
+                                        </Fragment>
+                                      );
+                                    })}
+                                  </div>
+                                  {item.callbackSchedule && (
+                                    <div className="mt-4 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2.5">
+                                      <div className="flex items-center gap-2">
+                                        <svg className="h-4 w-4 shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-[11px] font-semibold text-amber-800">{SCHEDULE_CALLBACK_LABEL}</span>
+                                      </div>
+                                      <p className="mt-1 text-xs text-amber-800">{item.callbackSchedule.replace(/\s*\(in\s+[^)]+\)\s*$/, "").trim()}</p>
+                                      <p className="mt-0.5 text-xs font-medium text-amber-900">
+                                        {item.totalHours && item.totalHours !== "—"
+                                          ? `In: ${item.totalHours}`
+                                          : lead.callbackTime
+                                            ? `Overdue by ${getOverdueDuration(lead.callbackTime)}`
+                                            : "Overdue"}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
-                            {cycle.date && (
-                              <p className="text-xs text-slate-500">{cycle.date}</p>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <p className="font-medium text-slate-800">{cycle.label}</p>
-                            {cycle.date && (
-                              <p className="text-xs text-slate-500">{cycle.date}</p>
-                            )}
-                          </>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

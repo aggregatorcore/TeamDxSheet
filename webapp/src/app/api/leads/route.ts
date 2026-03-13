@@ -16,6 +16,7 @@ import {
   deleteLead,
   getTelecallerLeadStats,
 } from "@/lib/db";
+import { TAG_OPTIONS } from "@/types/lead";
 import { NextResponse } from "next/server";
 
 async function isAdmin(userId: string, supabase?: SupabaseClient): Promise<boolean> {
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
         place: place ?? "",
         number: number ?? "",
         assigned_to,
-        flow: "Select",
+        flow: "Not Connected",
         tags: "",
         category: "active",
       })
@@ -187,8 +188,23 @@ export async function PATCH(request: Request) {
     }
 
     const updates: Record<string, unknown> = {};
-    if (flow !== undefined) updates.flow = flow;
-    if (tags !== undefined) updates.tags = tags;
+    // Global: only Connected | Not Connected
+    if (flow !== undefined) {
+      if (flow !== "Connected" && flow !== "Not Connected") {
+        return NextResponse.json({ error: "flow must be Connected or Not Connected" }, { status: 400 });
+      }
+      updates.flow = flow;
+    }
+    // Global: tags must be one of TAG_OPTIONS or empty
+    if (tags !== undefined) {
+      if (tags !== "" && !TAG_OPTIONS.includes(tags)) {
+        return NextResponse.json(
+          { error: `tags must be one of: ${TAG_OPTIONS.join(", ")} or empty` },
+          { status: 400 }
+        );
+      }
+      updates.tags = tags;
+    }
     if (note !== undefined) updates.note = note;
     if (category !== undefined) updates.category = category;
     if (body.name !== undefined) updates.name = body.name;

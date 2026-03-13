@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MARK_INVALID_LABEL } from "@/lib/constants";
 
 interface InvalidNumberModalProps {
   leadName: string;
@@ -104,7 +105,7 @@ export function InvalidNumberModal({
               disabled={loading}
               className="flex-1 rounded-lg bg-slate-700 px-4 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
-              {loading ? "Moving..." : "Mark Invalid"}
+              {loading ? "Moving..." : MARK_INVALID_LABEL}
             </button>
           </div>
         </div>

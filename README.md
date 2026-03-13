@@ -44,3 +44,54 @@ Open http://localhost:3000
 ## Admin
 
 Admin `/dashboard/admin` pe invalid leads dekh sakta hai.
+
+---
+
+## Deployment & Fix Cloudflare Error 521
+
+**Error 521 = "Web server is down"** — matlab Cloudflare tak request pohachti hai lekin aapka **origin server respond nahi kar raha**. Ye code bug nahi, server/hosting side fix chahiye.
+
+### 1. Server chalana (production)
+
+App jahan bhi host hai (VPS, Railway, Render, Vercel, etc.), wahan **process running** honi chahiye:
+
+```bash
+cd webapp
+npm install
+npm run build
+npm run start
+```
+
+- **Vercel / Netlify:** Deploy karo; woh khud build + start karte hain. Dashboard me deploy status check karo.
+- **VPS / VM:** Process hamesha chalegi isliye `pm2` use karo:
+  ```bash
+  npm run build && pm2 start npm --name "teamdx-web" -- start
+  pm2 save && pm2 startup
+  ```
+- **Docker:** Container me `npm run build && npm run start` chalao; port 3000 expose karo.
+
+### 2. Health check
+
+Server up hai ya nahi, iske liye health endpoint use karo:
+
+- **URL:** `https://your-domain.com/api/health`
+- **Expected:** `{"ok":true,"ts":"..."}` with status 200
+
+Agar ye bhi 521 de raha hai, to origin server bilkul reachable nahi hai.
+
+### 3. Cloudflare settings
+
+- **SSL/TLS:** Dashboard → SSL/TLS → Encryption mode = **Full** (agar origin pe HTTPS hai) ya **Flexible** (agar origin sirf HTTP hai).
+- **Origin server:** DNS / A record jis IP ya host pe app chal rahi hai, woh sahi ho. Agar hosting URL change kiya (e.g. new Vercel URL), to Cloudflare me bhi update karo.
+
+### 4. Checklist
+
+| Step | Action |
+|------|--------|
+| 1 | Hosting dashboard me jao (Vercel/Railway/Render/VPS). |
+| 2 | App **running** hai? Agar stopped/crashed hai to **restart** / **redeploy** karo. |
+| 3 | `https://your-domain.com/api/health` browser me kholo — 200 + `{"ok":true}` aana chahiye. |
+| 4 | Cloudflare SSL mode check karo (Full / Flexible). |
+| 5 | Agar VPS pe self-host ho: `pm2 list` se process check karo, zarurat ho to `pm2 restart teamdx-web`. |
+
+In steps ke baad Error 521 fix ho jana chahiye.

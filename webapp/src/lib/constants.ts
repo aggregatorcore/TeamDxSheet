@@ -1,9 +1,8 @@
-import type { TagOption } from "@/types/lead";
+import type { TagOption, ActionType } from "@/types/lead";
 import type { FlowOption } from "@/types/lead";
 
 const badgeBase = "font-semibold shadow-sm rounded-md";
 export const FLOW_COLORS: Record<FlowOption, string> = {
-  Select: `bg-neutral-200 text-neutral-800 border border-neutral-400 ${badgeBase}`,
   Connected: `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
   "Not Connected": `bg-red-500 text-white border border-red-600 ${badgeBase}`,
 };
@@ -14,8 +13,7 @@ export const TAG_COLORS: Record<TagOption | "overdue", string> = {
   "Busy IVR": `bg-orange-500 text-white border border-orange-600 ${badgeBase}`,
   "Incoming Off": `bg-sky-500 text-white border border-sky-600 ${badgeBase}`,
   "Invalid Number": `bg-red-400 text-white border border-red-500 ${badgeBase}`,
-  "WhatsApp Not Available": `bg-purple-500 text-white border border-purple-600 ${badgeBase}`,
-  "WhatsApp No Reply": `bg-violet-500 text-white border border-violet-600 ${badgeBase}`,
+  "WhatsApp Flow Active": `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
   "Not Interested": `bg-slate-500 text-white border border-slate-600 ${badgeBase}`,
   Interested: `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
   "Document received": `bg-teal-500 text-white border border-teal-600 ${badgeBase}`,
@@ -24,7 +22,6 @@ export const TAG_COLORS: Record<TagOption | "overdue", string> = {
 
 /** Text-only colors for Flow in table (no button/badge style) */
 export const FLOW_TEXT_COLORS: Record<FlowOption, string> = {
-  Select: "text-neutral-700",
   Connected: "text-emerald-600",
   "Not Connected": "text-red-600",
 };
@@ -36,15 +33,54 @@ export const TAG_TEXT_COLORS: Record<TagOption | "overdue", string> = {
   "Busy IVR": "text-orange-600",
   "Incoming Off": "text-sky-600",
   "Invalid Number": "text-red-600",
-  "WhatsApp Not Available": "text-purple-600",
-  "WhatsApp No Reply": "text-violet-600",
+  "WhatsApp Flow Active": "text-emerald-700",
   "Not Interested": "text-slate-600",
   Interested: "text-emerald-600",
   "Document received": "text-teal-600",
   overdue: "text-red-600",
 };
 
+/** Sub-tag display colors (under WhatsApp Flow Active). Not in TAG_OPTIONS. */
+export const SUBTAG_TEXT_COLORS: Record<string, string> = {
+  "WhatsApp No Reply": "text-violet-600",
+  "WhatsApp Not Available": "text-purple-600",
+};
+
+/** Global: display labels for user actions. Use everywhere for Callback, Followup, Try WhatsApp, Move buckets. */
+export const ACTION_LABELS: Record<ActionType, string> = {
+  callback: "Callback",
+  followup: "Followup",
+  move_review: "Move to Review",
+  move_green: "Move to Green",
+  move_exhaust: "Move to Exhaust",
+  try_whatsapp: "Try WhatsApp",
+};
+
+/** Global: sub-labels for callback action (Call Now, Schedule callback) and move_exhaust (Mark Invalid). */
+export const CALL_NOW_LABEL = "Call Now";
+export const SCHEDULE_CALLBACK_LABEL = "Schedule callback";
+export const MARK_INVALID_LABEL = "Mark Invalid";
+
+/** Global: bucket names for overlays/headers (Review, Green, Exhaust). */
+export const BUCKET_LABELS = {
+  review: "Review",
+  green: "Green",
+  exhaust: "Exhaust",
+} as const;
+
 export const GRACE_PERIOD_HOURS = 2;
+
+/**
+ * Cycle open/closed rule (timeline, LeadDetailModal): A cycle stays OPEN until a tag is applied again (same or other).
+ * Cycle closes only when: same tag applied again (new attempt) OR a different tag applied.
+ * Overdue / countdown completion does NOT close the cycle.
+ */
+
+/** TagHistory value when Try WhatsApp → Conversation start Yes. Timeline shows as "WhatsApp cycle". */
+export const CYCLE_NAME_WHATSAPP = "WhatsApp";
+
+/** Default WhatsApp message template for Incoming Off – placeholders: {{leadName}}, {{telecallerName}}, {{companyName}} */
+export const WHATSAPP_DEFAULT_TEMPLATE = "Hi {{leadName}}, I am trying to call your number but your number is incoming off. I am {{telecallerName}} from {{companyName}}. Are you looking for abroad visa?";
 
 /** How many seconds before callback time to start blinking */
 export const BLINK_BEFORE_SECONDS = 30;
@@ -159,10 +195,19 @@ export const VISA_TYPES: string[] = [
   "Business Visa", "Family Visa", "Permanent Residence", "Other",
 ];
 
+/** Global: prefix for action note in lead.note (e.g. "Action: Asked client to share documents") */
+export const ACTION_NOTE_PREFIX = "Action: ";
+
+/** Prefix for user-written manual note in lead.note. Only this part is editable in NoteEditModal. */
+export const MANUAL_NOTE_PREFIX = "Manual: ";
+
+/** Prefix for WhatsApp Flow Active sub-tag in lead.note (SubTag: WhatsApp No Reply). */
+export const SUBTAG_NOTE_PREFIX = "SubTag: ";
+
 /** Action that gets default 1hr followup countdown when selected */
 export const INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR = "Asked client to share documents";
 
-/** Actions for Interested flow */
+/** Global: action notes for Interested flow – single source of truth. Use INTERESTED_ACTIONS everywhere. */
 export const INTERESTED_ACTIONS: string[] = [
   "Asked client to share documents",
   "Client said they will share something with us",

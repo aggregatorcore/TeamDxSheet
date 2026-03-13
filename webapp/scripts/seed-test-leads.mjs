@@ -125,7 +125,7 @@ async function main() {
     place: l.place,
     number: l.number,
     assigned_to: assignedTo,
-    flow: "Select",
+    flow: "Not Connected",
     tags: "",
     category: "active",
     is_invalid: false,

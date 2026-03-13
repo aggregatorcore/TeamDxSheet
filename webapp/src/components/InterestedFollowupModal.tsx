@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
-import { WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
 import type { Lead } from "@/types/lead";
 
 function formatDateForInput(d: Date) {
@@ -77,6 +77,14 @@ export function InterestedFollowupModal({
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const schedule = async () => {
       const nextFollowup = new Date(Date.now() + WHATSAPP_FOLLOWUP_HOURS * 60 * 60 * 1000);
       const res = await fetch("/api/leads", {
@@ -101,7 +109,7 @@ export function InterestedFollowupModal({
     setScheduling(true);
     setError(null);
     const callbackTime = localDateTimeToISO(scheduleDate, scheduleTime, utcOffsetMinutes);
-    const actionNote = `Action: ${scheduleReason}`;
+    const actionNote = `${ACTION_NOTE_PREFIX}${scheduleReason}`;
     const newNote = lead.note ? `${lead.note} | ${actionNote}` : actionNote;
     const res = await fetch("/api/leads", {
       method: "PATCH",

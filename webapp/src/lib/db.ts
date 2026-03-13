@@ -10,7 +10,7 @@ function dbRowToLead(row: Record<string, unknown>): Lead {
     name: String(row.name ?? ""),
     place: String(row.place ?? ""),
     number: String(row.number ?? ""),
-    flow: (row.flow as Lead["flow"]) || "Select",
+    flow: (row.flow as Lead["flow"]) || "Not Connected",
     tags: (row.tags as Lead["tags"]) || "",
     note: row.note ? String(row.note) : undefined,
     callbackTime: row.callback_time
@@ -21,6 +21,7 @@ function dbRowToLead(row: Record<string, unknown>): Lead {
       : undefined,
     assignedTo: String(row.assigned_to ?? ""),
     category: (row.category as LeadCategory) || "active",
+    createdAt: row.created_at ? new Date(row.created_at as string).toISOString() : undefined,
   };
 }
 
@@ -48,9 +49,13 @@ export async function getLeadsForUser(
   const now = Date.now();
   const twoDaysMs = WHATSAPP_FOLLOWUP_MAX_DAYS * 24 * 60 * 60 * 1000;
   const toHide: string[] = [];
+  const isWhatsAppFollowup = (r: { tags: string; whatsapp_followup_started_at?: unknown }) =>
+    r.tags === "WhatsApp Flow Active" ||
+    (r.tags === "Incoming Off" && !!r.whatsapp_followup_started_at) ||
+    r.tags === "WhatsApp No Reply";
   const filtered = notDocumentReceived.filter((row) => {
-    if (row.tags === "WhatsApp No Reply" && row.whatsapp_followup_started_at) {
-      const started = new Date(row.whatsapp_followup_started_at as string).getTime();
+    if (isWhatsAppFollowup(row)) {
+      const started = new Date((row.whatsapp_followup_started_at as string) || 0).getTime();
       if (now - started >= twoDaysMs) {
         toHide.push(String(row.id));
         return false;
@@ -280,9 +285,13 @@ export async function getLeadsForUserAsAdmin(userEmail: string): Promise<Lead[]>
   const notDocumentReceived = notInReview.filter((row) => !row.is_document_received);
   const now = Date.now();
   const twoDaysMs = WHATSAPP_FOLLOWUP_MAX_DAYS * 24 * 60 * 60 * 1000;
+  const isWhatsAppFollowup = (r: { tags: string; whatsapp_followup_started_at?: unknown }) =>
+    r.tags === "WhatsApp Flow Active" ||
+    (r.tags === "Incoming Off" && !!r.whatsapp_followup_started_at) ||
+    r.tags === "WhatsApp No Reply";
   const filtered = notDocumentReceived.filter((row) => {
-    if (row.tags === "WhatsApp No Reply" && row.whatsapp_followup_started_at) {
-      const started = new Date(row.whatsapp_followup_started_at as string).getTime();
+    if (isWhatsAppFollowup(row)) {
+      const started = new Date((row.whatsapp_followup_started_at as string) || 0).getTime();
       if (now - started >= twoDaysMs) return false;
     }
     return true;

@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         place: String(l.place ?? "").trim(),
         number: String(l.number ?? "").trim(),
         assigned_to: email,
-        flow: "Select",
+        flow: "Not Connected",
         tags: "",
         category: "active",
       };

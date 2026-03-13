@@ -5,7 +5,8 @@ import type { Lead } from "@/types/lead";
 import { CallbackCountdown } from "@/components/CallbackCountdown";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
 import { useCurrentTime } from "@/hooks/useCurrentTime";
-import { BLINK_BEFORE_SECONDS, GRACE_PERIOD_HOURS, FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { BLINK_BEFORE_SECONDS, BUCKET_LABELS, GRACE_PERIOD_HOURS, FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { getEffectiveTag } from "@/lib/leadNote";
 import type { FlowOption, TagOption } from "@/types/lead";
 
 export type TelecallerStat = {
@@ -165,9 +166,9 @@ export function LiveSheetTable() {
             <tr>
               <th className="px-3 py-2 font-semibold">Telecaller</th>
               <th className="px-3 py-2 font-semibold text-right">Work</th>
-              <th className="px-3 py-2 font-semibold text-right">Green</th>
-              <th className="px-3 py-2 font-semibold text-right">Exhaust</th>
-              <th className="px-3 py-2 font-semibold text-right">Review</th>
+              <th className="px-3 py-2 font-semibold text-right">{BUCKET_LABELS.green}</th>
+              <th className="px-3 py-2 font-semibold text-right">{BUCKET_LABELS.exhaust}</th>
+              <th className="px-3 py-2 font-semibold text-right">{BUCKET_LABELS.review}</th>
               <th className="px-3 py-2 font-semibold text-right">Total</th>
             </tr>
           </thead>
@@ -268,7 +269,7 @@ export function LiveSheetTable() {
                           : "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                       }`}
                     >
-                      Green
+                      {BUCKET_LABELS.green}
                     </button>
                     <button
                       type="button"
@@ -279,7 +280,7 @@ export function LiveSheetTable() {
                           : "text-amber-700 hover:bg-amber-50 hover:text-amber-800"
                       }`}
                     >
-                      Review
+                      {BUCKET_LABELS.review}
                     </button>
                     <button
                       type="button"
@@ -290,7 +291,7 @@ export function LiveSheetTable() {
                           : "text-red-700 hover:bg-red-50 hover:text-red-800"
                       }`}
                     >
-                      Exhaust
+                      {BUCKET_LABELS.exhaust}
                     </button>
                   </div>
                 )}
@@ -314,10 +315,10 @@ export function LiveSheetTable() {
                   {modalView === "work"
                     ? "No work leads"
                     : modalView === "green"
-                      ? "No leads in Green bucket"
+                      ? `No leads in ${BUCKET_LABELS.green} bucket`
                       : modalView === "review"
-                        ? "No leads in Review"
-                        : "No leads in Exhaust"}
+                        ? `No leads in ${BUCKET_LABELS.review}`
+                        : `No leads in ${BUCKET_LABELS.exhaust}`}
                 </p>
               ) : (
                 (() => {
@@ -397,8 +398,8 @@ export function LiveSheetTable() {
                                   </span>
                                 </td>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5">
-                                  <span className={`inline-flex rounded border px-1.5 py-0.5 text-xs font-medium ${tagColor(lead.tags || "—", lead.category === "overdue")}`}>
-                                    {lead.category === "overdue" ? "Overdue" : lead.tags || "—"}
+                                  <span className={`inline-flex rounded border px-1.5 py-0.5 text-xs font-medium ${tagColor(getEffectiveTag(lead.note, lead.tags) || "—", lead.category === "overdue")}`}>
+                                    {lead.category === "overdue" ? "Overdue" : getEffectiveTag(lead.note, lead.tags) || "—"}
                                   </span>
                                 </td>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5">

@@ -11,7 +11,7 @@ interface FlowDropdownProps {
 }
 
 export function FlowDropdown({ value, onChange, disabled }: FlowDropdownProps) {
-  const colorClass = FLOW_COLORS[value] ?? FLOW_COLORS.Select;
+  const colorClass = FLOW_COLORS[value] ?? FLOW_COLORS["Not Connected"];
   return (
     <select
       value={value}

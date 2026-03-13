@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BUCKET_LABELS } from "@/lib/constants";
 import { ColorBadge } from "./ColorBadge";
 import type { TagOption } from "@/types/lead";
 
@@ -62,7 +63,7 @@ export function ExhaustAnimationOverlay({
 
         {/* Exhaust bucket - right of center, hides when lead enters */}
         <div className={`flex flex-col items-center gap-2 rounded-xl border-2 border-red-400 bg-red-50 px-6 py-4 shadow-xl ${animate ? "animate-exhaust-bucket-hide" : ""}`}>
-          <span className="text-lg font-bold text-red-800">Exhaust</span>
+          <span className="text-lg font-bold text-red-800">{BUCKET_LABELS.exhaust}</span>
           <svg
             className="h-10 w-10 text-red-600"
             fill="none"

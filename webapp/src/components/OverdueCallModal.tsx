@@ -80,17 +80,15 @@ export function OverdueCallModal({ lead, onClose, onDial }: OverdueCallModalProp
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
           <p className="text-sm font-medium text-neutral-700">This lead is overdue. Call them now.</p>
-          {lead.number && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-red-700/80">Number</p>
-              <p className="mt-0.5 font-mono text-lg font-semibold text-red-900 tracking-wide">
-                {lead.number.replace(/\s/g, "").split(",")[0]}
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col gap-3">
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2 text-sm">
+            <p><span className="font-medium text-neutral-500">Name:</span> {lead.name || "—"}</p>
+            <p><span className="font-medium text-neutral-500">Place:</span> {lead.place || "—"}</p>
+            <p><span className="font-medium text-neutral-500">ID:</span> {lead.id.slice(0, 8)}</p>
+            <p><span className="font-medium text-neutral-500">Number (to dial):</span> {lead.number || "—"}</p>
+          </div>
+          <div className="flex flex-wrap gap-3 pt-2">
             {isMobileOrTelCapable && dialNumber ? (
               <a
                 href={`tel:${dialNumber}`}
@@ -98,7 +96,7 @@ export function OverdueCallModal({ lead, onClose, onDial }: OverdueCallModalProp
                   onDial(lead);
                   onClose();
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-semibold text-white shadow-sm hover:bg-red-700 transition-colors"
+                className="flex-1 flex min-w-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 font-medium text-white hover:bg-red-700"
               >
                 <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -112,7 +110,7 @@ export function OverdueCallModal({ lead, onClose, onDial }: OverdueCallModalProp
                   onDial(lead);
                   onClose();
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-semibold text-white shadow-sm hover:bg-red-700 transition-colors"
+                className="flex-1 flex min-w-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 font-medium text-white hover:bg-red-700"
               >
                 <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -120,27 +118,22 @@ export function OverdueCallModal({ lead, onClose, onDial }: OverdueCallModalProp
                 Dial (use your phone)
               </button>
             )}
-            <div className="flex gap-3">
-              {!isMobileOrTelCapable && (
-                <button
-                  type="button"
-                  onClick={copyNumber}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                >
-                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy number
-                </button>
-              )}
+            {!isMobileOrTelCapable && (
               <button
                 type="button"
-                onClick={onClose}
-                className={`rounded-lg border-2 border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors ${!isMobileOrTelCapable ? "flex-1" : "w-full"}`}
+                onClick={copyNumber}
+                className="rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-700 hover:bg-neutral-50"
               >
-                Not now
+                Copy number
               </button>
-            </div>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-700 hover:bg-neutral-50"
+            >
+              Not now
+            </button>
           </div>
         </div>
       </div>

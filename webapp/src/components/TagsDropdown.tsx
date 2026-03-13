@@ -21,12 +21,7 @@ export function TagsDropdown({
   if (!show) return null;
 
   const options = flow === "Connected" ? TAGS_FOR_CONNECTED : TAGS_FOR_NOT_CONNECTED;
-  // When WhatsApp sub-tag, show "Incoming Off" in dropdown (parent flow)
-  const displayValue =
-    flow === "Not Connected" &&
-    (value === "WhatsApp No Reply" || value === "WhatsApp Not Available")
-      ? "Incoming Off"
-      : value;
+  const displayValue = value;
   const colorClass = displayValue ? TAG_COLORS[displayValue] : "bg-neutral-100 text-neutral-700 border-neutral-300";
 
   return (

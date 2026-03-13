@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BUCKET_LABELS } from "@/lib/constants";
 import { ColorBadge } from "./ColorBadge";
 import type { TagOption } from "@/types/lead";
 
@@ -44,7 +45,7 @@ export function ReviewAnimationOverlay({
         <div
           className={`flex flex-col items-center gap-2 rounded-xl border-2 border-amber-400 bg-amber-50 px-6 py-4 shadow-xl ${animate ? "animate-review-bucket-hide" : ""}`}
         >
-          <span className="text-lg font-bold text-amber-800">Review</span>
+          <span className="text-lg font-bold text-amber-800">{BUCKET_LABELS.review}</span>
           <svg
             className="h-10 w-10 text-amber-600"
             fill="none"

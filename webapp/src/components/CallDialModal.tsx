@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Lead, TagOption } from "@/types/lead";
-import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
+import { TAGS_FOR_NOT_CONNECTED, TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
+import { ACTION_NOTE_PREFIX, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 
 const QUICK_PRESETS = [
@@ -35,19 +36,19 @@ function formatTimeForInput(d: Date) {
   return d.toTimeString().slice(0, 5);
 }
 
-/** Parse note for last "Attempt N: Tag" - same tag = same cycle, increment; else new cycle = 1 */
-function getNextAttempt(prevNote: string | undefined, newTag: TagOption): number {
+/** One complete flow (modal open → connect/reason → tag/action) = 1 cycle. Next attempt = last cycle count + 1. */
+function getNextAttempt(prevNote: string | undefined, _newTag: TagOption): number {
   if (!prevNote) return 1;
   const parts = prevNote.split(" | ");
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*(.+)$/);
+  let maxNum = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*.+$/);
     if (m) {
-      const prevTag = m[2].trim();
-      if (prevTag === newTag) return parseInt(m[1], 10) + 1;
-      return 1;
+      const n = parseInt(m[1], 10);
+      if (n > maxNum) maxNum = n;
     }
   }
-  return 1;
+  return maxNum + 1;
 }
 
 export interface CallDialModalProps {
@@ -61,6 +62,8 @@ export interface CallDialModalProps {
   /** When user completes Not Interested form inline – same as NotInterestedModal onConfirm; called with lead + result, then modal closes */
   onConfirmNotInterested?: (lead: Lead, result: NotInterestedResult) => Promise<void>;
   onInvalidNumber?: (lead: Lead) => void;
+  /** When user selects Incoming Off and save succeeds – open Try WhatsApp modal with this lead. */
+  onIncomingOffSaved?: (lead: Lead) => void;
 }
 
 type Step = "dial" | "connect" | "connected" | "reason" | "schedule";
@@ -74,6 +77,7 @@ export function CallDialModal({
   onConnectDocumentReceived,
   onConfirmNotInterested,
   onInvalidNumber,
+  onIncomingOffSaved,
 }: CallDialModalProps) {
   const [step, setStep] = useState<Step>("dial");
   const [tag, setTag] = useState<TagOption | "">("");
@@ -181,6 +185,8 @@ export function CallDialModal({
         setLoading(true);
         setError(null);
         const noteWithHistory = appendTagHistory(lead.note, selectedTag);
+        const actionNote = `${ACTION_NOTE_PREFIX}${selectedTag}`;
+        const noteWithAction = noteWithHistory ? `${noteWithHistory} | ${actionNote}` : actionNote;
         const res = await fetch("/api/leads", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -188,7 +194,7 @@ export function CallDialModal({
             id: lead.id,
             flow: "Not Connected",
             tags: selectedTag,
-            note: noteWithHistory,
+            note: noteWithAction,
             category: "active",
           }),
         });
@@ -204,10 +210,7 @@ export function CallDialModal({
       return;
     }
 
-    const canSchedule =
-      selectedTag === "No Answer" ||
-      selectedTag === "Busy IVR" ||
-      selectedTag === "Switch Off";
+    const canSchedule = TAGS_SCHEDULEABLE_CALLBACK.includes(selectedTag);
     if (canSchedule) {
       setTag(selectedTag);
       setError(null);
@@ -219,6 +222,8 @@ export function CallDialModal({
     setLoading(true);
     setError(null);
     const noteWithHistory = appendTagHistory(lead.note, selectedTag);
+    const actionNote = `${ACTION_NOTE_PREFIX}${selectedTag}`;
+    const noteWithAction = noteWithHistory ? `${noteWithHistory} | ${actionNote}` : actionNote;
     const res = await fetch("/api/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -226,11 +231,15 @@ export function CallDialModal({
         id: lead.id,
         flow: "Not Connected",
         tags: selectedTag,
-        note: noteWithHistory,
+        note: noteWithAction,
       }),
     });
     setLoading(false);
     if (res.ok) {
+      if (selectedTag === "Incoming Off" && onIncomingOffSaved) {
+        const updatedLead: Lead = { ...lead, note: noteWithAction, tags: "Incoming Off", flow: "Not Connected" };
+        onIncomingOffSaved(updatedLead);
+      }
       onSuccess();
       onClose();
     } else {
@@ -250,7 +259,10 @@ export function CallDialModal({
     const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
-    const newNote = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+    const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+    const callbackDateStr = new Date(callbackTime).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+    const actionNote = `${ACTION_NOTE_PREFIX}Callback scheduled for ${callbackDateStr}`;
+    const newNote = noteWithAttempt ? `${noteWithAttempt} | ${actionNote}` : actionNote;
 
     const res = await fetch("/api/leads", {
       method: "PATCH",
@@ -392,6 +404,7 @@ export function CallDialModal({
             </>
           )}
 
+          {/* Flow (Connected / Not Connected) is set here only – no flow dropdown elsewhere */}
           {step === "connect" && (
             <>
               <p className="mb-4 text-sm font-medium text-neutral-700">Did the call connect?</p>
@@ -490,6 +503,7 @@ export function CallDialModal({
             </>
           )}
 
+          {/* No Answer cycle: reason step. No Answer / Switch Off / Busy IVR (TAGS_SCHEDULEABLE_CALLBACK) → schedule step; else save. */}
           {step === "reason" && (
             <>
               <p className="mb-2 text-sm font-medium text-neutral-700">Why didn&apos;t it connect?</p>
@@ -515,7 +529,7 @@ export function CallDialModal({
           {step === "schedule" && (
             <>
               <p className="mb-2 text-sm font-medium text-neutral-700">
-                Schedule callback? <span className="text-amber-700">({tag})</span>
+                {SCHEDULE_CALLBACK_LABEL}? <span className="text-amber-700">({tag})</span>
               </p>
               <div className="mb-3 flex flex-wrap gap-2">
                 {QUICK_PRESETS.map((p) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
 import { WHATSAPP_FOLLOWUP_HOURS, WHATSAPP_FOLLOWUP_MAX_DAYS } from "@/lib/constants";
 
@@ -23,6 +23,14 @@ export function WhatsAppFollowupModal({
 }: WhatsAppFollowupModalProps) {
   const [loading, setLoading] = useState(false);
   const [selectedOption, setSelectedOption] = useState<"yes" | "no" | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const started = whatsappFollowupStartedAt ? new Date(whatsappFollowupStartedAt) : new Date();
   const daysPassed = (Date.now() - started.getTime()) / (24 * 60 * 60 * 1000);
@@ -55,7 +63,7 @@ export function WhatsAppFollowupModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id,
-          tags: "WhatsApp No Reply",
+          tags: "Incoming Off",
           moveToAdminWithTag: true,
         }),
       });
@@ -73,7 +81,7 @@ export function WhatsAppFollowupModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id,
-        tags: "WhatsApp No Reply",
+        tags: "Incoming Off",
         category: "callback",
         callbackTime: nextFollowup.toISOString(),
       }),
