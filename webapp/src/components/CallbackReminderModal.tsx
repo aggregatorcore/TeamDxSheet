@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Lead, TagOption } from "@/types/lead";
-import { TAGS_FOR_CONNECTED, TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
+import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
 import { appendTagHistory } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
@@ -37,7 +37,7 @@ function formatTimeForInput(d: Date) {
 }
 
 /** One complete flow cycle = 1 attempt. Next attempt = last cycle count + 1 (same as CallDialModal). */
-function getNextAttempt(prevNote: string | undefined, _newTag: TagOption): number {
+function getNextAttempt(prevNote: string | undefined): number {
   if (!prevNote) return 1;
   const parts = prevNote.split(" | ");
   let maxNum = 0;
@@ -154,7 +154,7 @@ export function CallbackReminderModal({
     setLoading(true);
     setError(null);
     const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
-    const attemptNum = getNextAttempt(lead.note, tag);
+    const attemptNum = getNextAttempt(lead.note);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
     const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;

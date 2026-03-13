@@ -37,7 +37,7 @@ function formatTimeForInput(d: Date) {
 }
 
 /** One complete flow (modal open → connect/reason → tag/action) = 1 cycle. Next attempt = last cycle count + 1. */
-function getNextAttempt(prevNote: string | undefined, _newTag: TagOption): number {
+function getNextAttempt(prevNote: string | undefined): number {
   if (!prevNote) return 1;
   const parts = prevNote.split(" | ");
   let maxNum = 0;
@@ -256,7 +256,7 @@ export function CallDialModal({
     setLoading(true);
     setError(null);
     const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
-    const attemptNum = getNextAttempt(lead.note, tag);
+    const attemptNum = getNextAttempt(lead.note);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
     const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;

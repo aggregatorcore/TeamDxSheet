@@ -1,10 +1,10 @@
 "use client";
 
 import { Fragment, useState, useEffect, useCallback } from "react";
-import type { Lead, FlowOption } from "@/types/lead";
+import type { Lead } from "@/types/lead";
 import { TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
 import { getTagHistory } from "@/lib/leadNote";
-import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, FLOW_COLORS, SCHEDULE_CALLBACK_LABEL, TAG_COLORS } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
 import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
 
 interface LeadDetailModalProps {
@@ -63,12 +63,6 @@ function getUserNotes(note: string | undefined): string {
     .trim();
 }
 
-/** Infer flow from tag: Connected tags = Interested/Not Interested */
-function inferFlowFromTag(tag: string): FlowOption {
-  if (tag === "Interested" || tag === "Not Interested") return "Connected";
-  return "Not Connected";
-}
-
 type TimelineItem =
   | { type: "lead_created"; assignedTo: string; date: string }
   | {
@@ -111,7 +105,7 @@ function getOverdueDuration(callbackTime: string): string {
 }
 
 /** Build timeline: Lead created (assigned to + timestamp), then each cycle (Start → Dial → Not connected → Tag → Callback schedule → Cycle closed), cycle name. */
-function getTimelineItems(lead: Lead, action: string | undefined): TimelineItem[] {
+function getTimelineItems(lead: Lead, _action: string | undefined): TimelineItem[] {
   const items: TimelineItem[] = [];
 
   if (lead.createdAt) {
