@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import type { TagOption } from "@/types/lead";
+import type { WhatsAppSubFlow } from "@/types/lead";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
 import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, SUBFLOW_NOTE_PREFIX, WHATSAPP_DEFAULT_TEMPLATE, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
 import { appendTagHistory } from "@/lib/leadNote";
@@ -73,7 +73,7 @@ export function WhatsAppModal({
   const [anotherNumber, setAnotherNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [subFlow, setSubFlow] = useState<TagOption | "">("");
+  const [subFlow, setSubFlow] = useState<WhatsAppSubFlow | "">("");
   const [customTemplates, setCustomTemplates] = useState<WhatsAppTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
