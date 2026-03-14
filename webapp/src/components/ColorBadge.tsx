@@ -1,6 +1,6 @@
 "use client";
 
-import { TAG_COLORS } from "@/lib/constants";
+import { ACTION_LABELS, TAG_COLORS } from "@/lib/constants";
 import type { TagOption } from "@/types/lead";
 
 interface ColorBadgeProps {
@@ -14,7 +14,7 @@ export function ColorBadge({ tag, category }: ColorBadgeProps) {
       <span
         className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${TAG_COLORS.overdue}`}
       >
-        Overdue
+        {ACTION_LABELS.overdue}
       </span>
     );
   }

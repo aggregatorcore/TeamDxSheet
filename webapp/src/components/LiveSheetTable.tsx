@@ -6,6 +6,7 @@ import { CallbackCountdown } from "@/components/CallbackCountdown";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
 import { useCurrentTime } from "@/hooks/useCurrentTime";
 import { BLINK_BEFORE_SECONDS, BUCKET_LABELS, GRACE_PERIOD_HOURS, FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { getDisplayId } from "@/lib/displayId";
 import { getEffectiveTag } from "@/lib/leadNote";
 import type { FlowOption, TagOption } from "@/types/lead";
 
@@ -373,7 +374,7 @@ export function LiveSheetTable() {
                           <tr key={lead.id} className={rowClass}>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5 font-mono text-xs text-slate-900">
                                   <div className="flex items-center gap-1">
-                                    <span>{lead.id.slice(0, 8)}</span>
+                                    <span>{getDisplayId(lead.id)}</span>
                                     <button
                                       type="button"
                                       onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }}

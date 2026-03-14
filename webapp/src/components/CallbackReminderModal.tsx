@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Lead, TagOption } from "@/types/lead";
 import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
-import { appendTagHistory } from "@/lib/leadNote";
+import { appendTagHistory, getNextAttempt } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
 import { ACTION_NOTE_PREFIX, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
@@ -34,21 +34,6 @@ function formatDateForInput(d: Date) {
 }
 function formatTimeForInput(d: Date) {
   return d.toTimeString().slice(0, 5);
-}
-
-/** One complete flow cycle = 1 attempt. Next attempt = last cycle count + 1 (same as CallDialModal). */
-function getNextAttempt(prevNote: string | undefined): number {
-  if (!prevNote) return 1;
-  const parts = prevNote.split(" | ");
-  let maxNum = 0;
-  for (let i = 0; i < parts.length; i++) {
-    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*.+$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > maxNum) maxNum = n;
-    }
-  }
-  return maxNum + 1;
 }
 
 export interface CallbackReminderModalProps {
@@ -154,7 +139,7 @@ export function CallbackReminderModal({
     setLoading(true);
     setError(null);
     const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
-    const attemptNum = getNextAttempt(lead.note);
+    const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
     const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
@@ -194,16 +179,20 @@ export function CallbackReminderModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-2 bg-gradient-to-br from-amber-700 to-amber-800 px-4 py-3">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
+          {step !== "reminder" ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+              aria-label="Back"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-9 shrink-0" aria-hidden />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

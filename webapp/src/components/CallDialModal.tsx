@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Lead, TagOption } from "@/types/lead";
 import { TAGS_FOR_NOT_CONNECTED, TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
-import { appendTagHistory } from "@/lib/leadNote";
+import { getDisplayId } from "@/lib/displayId";
+import { appendTagHistory, getNextAttempt } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
-import { ACTION_NOTE_PREFIX, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, INTERESTED_ACTIONS, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 
 const QUICK_PRESETS = [
@@ -36,21 +37,6 @@ function formatTimeForInput(d: Date) {
   return d.toTimeString().slice(0, 5);
 }
 
-/** One complete flow (modal open → connect/reason → tag/action) = 1 cycle. Next attempt = last cycle count + 1. */
-function getNextAttempt(prevNote: string | undefined): number {
-  if (!prevNote) return 1;
-  const parts = prevNote.split(" | ");
-  let maxNum = 0;
-  for (let i = 0; i < parts.length; i++) {
-    const m = parts[i].trim().match(/^Attempt\s+(\d+):\s*.+$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > maxNum) maxNum = n;
-    }
-  }
-  return maxNum + 1;
-}
-
 export interface CallDialModalProps {
   lead: Lead;
   onClose: () => void;
@@ -62,8 +48,8 @@ export interface CallDialModalProps {
   /** When user completes Not Interested form inline – same as NotInterestedModal onConfirm; called with lead + result, then modal closes */
   onConfirmNotInterested?: (lead: Lead, result: NotInterestedResult) => Promise<void>;
   onInvalidNumber?: (lead: Lead) => void;
-  /** When user selects Incoming Off and save succeeds – open Try WhatsApp modal with this lead. */
-  onIncomingOffSaved?: (lead: Lead) => void;
+  /** When user selects Incoming Off – open Try WhatsApp modal without saving; lead stays unchanged until user completes flow in WhatsApp modal. */
+  onIncomingOffClick?: (lead: Lead) => void;
 }
 
 type Step = "dial" | "connect" | "connected" | "reason" | "schedule";
@@ -77,7 +63,7 @@ export function CallDialModal({
   onConnectDocumentReceived,
   onConfirmNotInterested,
   onInvalidNumber,
-  onIncomingOffSaved,
+  onIncomingOffClick,
 }: CallDialModalProps) {
   const [step, setStep] = useState<Step>("dial");
   const [tag, setTag] = useState<TagOption | "">("");
@@ -95,6 +81,8 @@ export function CallDialModal({
   const [error, setError] = useState<string | null>(null);
   const [isMobileOrTelCapable, setIsMobileOrTelCapable] = useState(true);
   const [showInterestedSubChoice, setShowInterestedSubChoice] = useState(false);
+  /** Selected sub-flow in Interested section; applied only on "Apply now" click */
+  const [selectedInterestedAction, setSelectedInterestedAction] = useState<string | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -148,6 +136,7 @@ export function CallDialModal({
   const handleConnectedChoice = (choice: "Interested" | "Not Interested") => {
     if (choice === "Interested") {
       setShowNotInterestedSubChoice(false);
+      setSelectedInterestedAction(null);
       setShowInterestedSubChoice(true);
     } else if (choice === "Not Interested") {
       if (onConfirmNotInterested) {
@@ -173,6 +162,36 @@ export function CallDialModal({
       onClose();
     } else {
       onClose();
+    }
+  };
+
+  const handleInterestedAction = async (action: string) => {
+    if (action === "Document received" && onConnectDocumentReceived) {
+      onConnectDocumentReceived(lead);
+      onClose();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const actionNote = `${ACTION_NOTE_PREFIX}${action}`;
+    const noteWithAction = lead.note ? `${lead.note} | ${actionNote}` : actionNote;
+    const res = await fetch("/api/leads", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: lead.id,
+        flow: "Connected",
+        tags: "Interested",
+        note: noteWithAction,
+      }),
+    });
+    setLoading(false);
+    if (res.ok) {
+      onSuccess();
+      onClose();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed");
     }
   };
 
@@ -218,6 +237,12 @@ export function CallDialModal({
       return;
     }
 
+    if (selectedTag === "Incoming Off" && onIncomingOffClick) {
+      onIncomingOffClick(lead);
+      onClose();
+      return;
+    }
+
     setTag(selectedTag);
     setLoading(true);
     setError(null);
@@ -236,10 +261,6 @@ export function CallDialModal({
     });
     setLoading(false);
     if (res.ok) {
-      if (selectedTag === "Incoming Off" && onIncomingOffSaved) {
-        const updatedLead: Lead = { ...lead, note: noteWithAction, tags: "Incoming Off", flow: "Not Connected" };
-        onIncomingOffSaved(updatedLead);
-      }
       onSuccess();
       onClose();
     } else {
@@ -256,7 +277,7 @@ export function CallDialModal({
     setLoading(true);
     setError(null);
     const callbackTime = localDateTimeToISO(date, time, utcOffsetMinutes);
-    const attemptNum = getNextAttempt(lead.note);
+    const attemptNum = getNextAttempt(lead.note, tag);
     const attemptNote = `Attempt ${attemptNum}: ${tag}`;
     const noteWithTagHistory = appendTagHistory(lead.note, tag);
     const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
@@ -314,16 +335,20 @@ export function CallDialModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-2 bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
+          {step !== "dial" ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+              aria-label="Back"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-9 shrink-0" aria-hidden />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,7 +379,7 @@ export function CallDialModal({
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 space-y-2 text-sm">
                 <p><span className="font-medium text-neutral-500">Name:</span> {lead.name || "—"}</p>
                 <p><span className="font-medium text-neutral-500">Place:</span> {lead.place || "—"}</p>
-                <p><span className="font-medium text-neutral-500">ID:</span> {lead.id.slice(0, 8)}</p>
+                <p><span className="font-medium text-neutral-500">ID:</span> {getDisplayId(lead.id)}</p>
                 <p><span className="font-medium text-neutral-500">Number (to dial):</span> {lead.number || "—"}</p>
               </div>
               <div className="flex flex-wrap gap-3 pt-2">
@@ -460,32 +485,41 @@ export function CallDialModal({
               </div>
               {showInterestedSubChoice && (
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-3 space-y-3">
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-slate-700">New or Document received?</p>
-                    <div className="flex flex-wrap gap-2">
+                  <p className="mb-2 text-xs font-medium text-slate-700">New or choose action</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInterestedChoice("new")}
+                      className="rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-900 ring-2 ring-emerald-500/30 hover:bg-emerald-200 transition-colors"
+                    >
+                      New
+                    </button>
+                    {INTERESTED_ACTIONS.map((action) => (
                       <button
+                        key={action}
                         type="button"
-                        onClick={() => handleInterestedChoice("new")}
-                        className="rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-900 ring-2 ring-emerald-500/30 hover:bg-emerald-200 transition-colors"
+                        disabled={loading}
+                        onClick={() => setSelectedInterestedAction((prev) => (prev === action ? null : action))}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                          selectedInterestedAction === action
+                            ? "border-emerald-500 bg-emerald-100 text-emerald-900 ring-2 ring-emerald-500/30"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                        }`}
                       >
-                        New
+                        {action}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInterestedChoice("document_received")}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                      >
-                        Document received
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowInterestedSubChoice(false)}
-                    className="text-sm text-neutral-500 underline hover:text-neutral-700"
-                  >
-                    Back
-                  </button>
+                  {selectedInterestedAction && (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleInterestedAction(selectedInterestedAction)}
+                      className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {loading ? "..." : "Apply now"}
+                    </button>
+                  )}
                 </div>
               )}
               {showNotInterestedSubChoice && onConfirmNotInterested && (

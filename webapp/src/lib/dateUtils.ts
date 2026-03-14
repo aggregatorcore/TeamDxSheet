@@ -1,4 +1,22 @@
 /**
+ * Locale-independent short date for callback time in table/cards: DD/MM, h:mm am/pm.
+ * Use this everywhere we display callback date in the UI so format never varies by browser/locale.
+ */
+export function formatCallbackDateShort(callbackTime: string | null | undefined): string {
+  if (callbackTime == null || String(callbackTime).trim() === "") return "—";
+  const ms = new Date(String(callbackTime).trim()).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  const d = new Date(ms);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  let hour = d.getHours();
+  const minute = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hour >= 12 ? "pm" : "am";
+  hour = hour % 12 || 12;
+  return `${day}/${month}, ${hour}:${minute} ${ampm}`;
+}
+
+/**
  * Converts user's selected date + time to UTC ISO string for the server.
  * Uses internet-fetched timezone (utcOffsetMinutes) when provided so PC time/zone
  * doesn't affect scheduling. Fallback: browser local when offset not available.

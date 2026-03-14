@@ -3,7 +3,8 @@
 import { Fragment, useState, useEffect, useCallback } from "react";
 import type { Lead } from "@/types/lead";
 import { TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
-import { getTagHistory } from "@/lib/leadNote";
+import { getDisplayId } from "@/lib/displayId";
+import { getInterestedSubFlow, getTagHistory } from "@/lib/leadNote";
 import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
 import { InterestedFormContent, type InterestedFormValues } from "./InterestedFormContent";
 
@@ -407,7 +408,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                 <p className="text-xs text-slate-400">
                   {lead.source && <span>{lead.source}</span>}
                   {lead.source && lead.id && <span className="mx-1.5">•</span>}
-                  {lead.id && <span className="font-mono text-slate-400" title={lead.id}>{lead.id.length > 8 ? `${lead.id.slice(0, 8)}…` : lead.id}</span>}
+                  {lead.id && <span className="font-mono text-slate-400" title={lead.id}>{getDisplayId(lead.id)}</span>}
                 </p>
               </div>
             </div>
@@ -573,7 +574,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                       <div className="flex gap-2 py-1 min-w-0" title={lead.id || undefined}>
                         <span className="min-w-[110px] shrink-0 text-sm font-medium text-slate-500">ID:</span>
                         <span className={`min-w-0 truncate font-mono text-sm ${lead.id ? "text-slate-600" : "text-slate-400 italic"}`}>
-                          {lead.id || PLACEHOLDER}
+                          {lead.id ? getDisplayId(lead.id) : PLACEHOLDER}
                         </span>
                       </div>
                     </div>
@@ -681,7 +682,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                 )}
 
                 {/* Action (Current / Next) only for Connected + Interested or Document received; hide for Not Connected / No Answer etc. */}
-                {(lead.flow === "Connected" && (lead.tags === "Interested" || lead.tags === "Document received")) && (
+                {(lead.flow === "Connected" && (lead.tags === "Interested" || String(lead.tags) === "Document received")) && (
                   <div className="border-t border-slate-100 pt-5">
                     <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -693,18 +694,7 @@ export function LeadDetailModal({ lead, onClose, initialTab = "overview", onUpda
                       <div className="space-y-1">
                         <Field
                           label="Current action"
-                          value={(() => {
-                            if (action) return action;
-                            if (lead.tags === "Document received") return "Document received";
-                            const tagHistory = getTagHistory(lead.note);
-                            const lastTag = tagHistory[tagHistory.length - 1];
-                            if (lastTag) {
-                              const tagName = lastTag.replace(/\s*\([^)]*\)$/, "").trim();
-                              if (tagName === "Document received") return "Document received";
-                            }
-                            if (lead.note?.includes("Document received")) return "Document received";
-                            return undefined;
-                          })()}
+                          value={action || getInterestedSubFlow(lead.note, lead.tags) || undefined}
                         />
                         <Field label="Next action" value={action} placeholder="—" />
                       </div>

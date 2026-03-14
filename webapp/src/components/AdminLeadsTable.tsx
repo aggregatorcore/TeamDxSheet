@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
 import { useToast } from "@/hooks/useToast";
+import { getDisplayId } from "@/lib/displayId";
 import { getEffectiveTag } from "@/lib/leadNote";
 import type { Lead } from "@/types/lead";
 
@@ -21,7 +22,7 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
   const { showToast } = useToast();
 
   const handleDelete = async (lead: Lead) => {
-    if (!confirm(`Delete lead "${lead.name}" (${lead.id.slice(0, 8)}) permanently? This cannot be undone.`)) return;
+    if (!confirm(`Delete lead "${lead.name}" (${getDisplayId(lead.id)}) permanently? This cannot be undone.`)) return;
     setDeletingId(lead.id);
     try {
       const res = await fetch(`/api/leads?id=${encodeURIComponent(lead.id)}`, { method: "DELETE" });
@@ -98,7 +99,7 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
               >
                 <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 ${borderColor} px-2 py-1.5 text-xs font-mono text-slate-900 transition-colors duration-150 ${rowBg}`}>
                   <div className="flex items-center gap-1">
-                    <span>{lead.id.slice(0, 8)}</span>
+                    <span>{getDisplayId(lead.id)}</span>
                     <button
                       type="button"
                       onClick={() => openModal(lead, "overview")}

@@ -38,6 +38,8 @@ interface InterestedFollowupModalProps {
   lead: Lead;
   action?: string;
   onClose: () => void;
+  /** When provided, Back goes to previous modal (one step). When not provided, back button is hidden. */
+  onBack?: () => void;
   onSuccess: () => void;
   onDocumentReceived?: (lead: Lead) => void;
   /** When user selects "Client refused" – parent opens Not Interested flow */
@@ -48,6 +50,7 @@ export function InterestedFollowupModal({
   lead,
   action,
   onClose,
+  onBack,
   onSuccess,
   onDocumentReceived,
   onNotInterested,
@@ -169,16 +172,20 @@ export function InterestedFollowupModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-2 bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+              aria-label="Back"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-9 shrink-0" aria-hidden />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -355,15 +362,6 @@ export function InterestedFollowupModal({
             </>
           )}
 
-          {!loading && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-800 hover:bg-neutral-50"
-            >
-              Cancel
-            </button>
-          )}
         </div>
       </div>
     </div>

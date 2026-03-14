@@ -15,6 +15,7 @@ import { GreenBucketAnimationOverlay } from "./GreenBucketAnimationOverlay";
 import { ExhaustAnimationOverlay } from "./ExhaustAnimationOverlay";
 import { ReviewAnimationOverlay } from "./ReviewAnimationOverlay";
 import { CallbackCountdown } from "./CallbackCountdown";
+import { TagIcon } from "./TagIcons";
 import { LeadDetailModal } from "./LeadDetailModal";
 import { NoteEditModal } from "./NoteEditModal";
 import { CallDialModal } from "./CallDialModal";
@@ -22,17 +23,61 @@ import { CallbackReminderModal } from "./CallbackReminderModal";
 import { OverdueCallModal } from "./OverdueCallModal";
 import { useCurrentTime } from "@/hooks/useCurrentTime";
 import { useCountdown } from "@/hooks/useCountdown";
-import { ACTION_LABELS, ACTION_NOTE_PREFIX, BLINK_BEFORE_SECONDS, CALL_NOW_LABEL, GRACE_PERIOD_HOURS, INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR, NO_PASSPORT_SCRIPT, SUBTAG_TEXT_COLORS, TAG_TEXT_COLORS, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
-import { appendTagHistory, getEffectiveTag, getTagHistory, getWhatsAppSubTag } from "@/lib/leadNote";
+import { ACTION_LABELS, ACTION_NOTE_PREFIX, BLINK_BEFORE_SECONDS, CALL_NOW_LABEL, GRACE_PERIOD_HOURS, INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR, NO_PASSPORT_SCRIPT, SUBFLOW_TEXT_COLORS, TAG_TEXT_COLORS, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
+import { getDisplayId } from "@/lib/displayId";
+import { formatCallbackDateShort } from "@/lib/dateUtils";
+import { appendTagHistory, getDisplayAttemptForTag, getEffectiveTag, getTagHistory, getInterestedSubFlow, getLastAttemptForTag, getWhatsAppSubFlow } from "@/lib/leadNote";
+
+/** Single source of truth for callback flow. Uses getEffectiveTag so Incoming Off (from tags or note) is never treated as No Answer callback. Use this only — do not add new branches that check lead.tags for Incoming Off. */
+function getCallbackFlowType(lead: Lead): "whatsapp_followup" | "no_answer_callback" | "other_callback" | null {
+  if (!lead.callbackTime) return null;
+  const effective = getEffectiveTag(lead.note, lead.tags);
+  const t = (lead.tags ?? "").trim();
+  if (t === "Interested") return null;
+  if (t === "WhatsApp Flow Active" || t === "Incoming Off" || effective === "Incoming Off" || t === "WhatsApp No Reply") return "whatsapp_followup";
+  if (TAGS_SCHEDULEABLE_CALLBACK.includes(effective as TagOption)) return "no_answer_callback";
+  return "other_callback";
+}
+
+/** Attempt badge is hidden when count is 1; shown from 2 onwards. */
+const ATTEMPT_BADGE_MIN = 2;
+
+/** Corner badge style for attempt count — fixed top-left position inside container. */
+const ATTEMPT_CORNER_BADGE_CLASS =
+  "absolute top-0 left-0 z-10 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-200/90 text-[9px] font-bold tabular-nums leading-none text-amber-900 shadow-sm";
+/** Left padding on pill when badge is visible so badge never overlaps icon/text. */
+const ATTEMPT_BADGE_PILL_PADDING = "pl-4 pr-2";
+
+/** Shared style for amber callback/followup cards (No Answer, Other callback, Interested Followup). Badge slot (pl-4) always reserved so position is fixed. */
+const CALLBACK_CARD_AMBER_CLASS =
+  "relative inline-flex h-[30px] min-w-0 max-w-full flex-nowrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/70 pl-4 pr-2 py-1 shadow-sm";
+/** Overdue callback card: same layout as amber card (badge slot pl-4, badge at top-left) so badge position matches. */
+const CALLBACK_CARD_OVERDUE_CLASS =
+  "relative inline-flex h-[30px] min-w-0 max-w-full flex-nowrap items-center gap-2 rounded-lg border border-slate-200 bg-white pl-4 pr-2 py-1 shadow-sm";
+const CALLBACK_CARD_AMBER_DIVIDER_CLASS = "self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-amber-300";
+
+/** Small info icon button to open lead detail/timeline from a callback card. */
+function TimelineInfoButton({ onClick }: { onClick: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 rounded p-0.5 text-slate-500 transition-colors hover:bg-amber-200/80 hover:text-slate-700"
+      title="View timeline"
+      aria-label="View timeline"
+    >
+      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </button>
+  );
+}
 
 /** Live countdown to 1hr from mount, with date. Same alignment as CallbackCountdown: badge + countdown row, date row. Badge is clickable when onFollowupClick is provided. */
 function Default1hrCountdown({ onFollowupClick }: { onFollowupClick?: () => void }) {
   const [targetTime] = useState(() => new Date(Date.now() + WHATSAPP_FOLLOWUP_HOURS * 60 * 60 * 1000).toISOString());
   const countdown = useCountdown(targetTime);
-  const dateLabel = (() => {
-    const ms = new Date(targetTime).getTime();
-    return Number.isFinite(ms) ? new Date(ms).toLocaleString() : "—";
-  })();
+  const dateLabel = formatCallbackDateShort(targetTime);
   const badgeClass = "shrink-0 rounded border border-emerald-600 bg-emerald-700 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-emerald-600";
   return (
     <div className="flex flex-col gap-0">
@@ -53,14 +98,6 @@ function Default1hrCountdown({ onFollowupClick }: { onFollowupClick?: () => void
   );
 }
 
-function WhatsAppIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-    </svg>
-  );
-}
-
 interface LeadTableProps {
   leads: Lead[];
   onRefresh: () => void;
@@ -75,8 +112,9 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [followupLead, setFollowupLead] = useState<Lead | null>(null);
   const [invalidLead, setInvalidLead] = useState<Lead | null>(null);
   const [notInterestedLead, setNotInterestedLead] = useState<Lead | null>(null);
-  const [notInterestedFrom, setNotInterestedFrom] = useState<"callDial" | "callNow" | "callbackReminder" | "interestedFollowup" | null>(null);
+  const [notInterestedFrom, setNotInterestedFrom] = useState<"callDial" | "callNow" | "callbackReminder" | "interestedFollowup" | "whatsappFollowup" | null>(null);
   const [interestedLead, setInterestedLead] = useState<Lead | null>(null);
+  const [interestedFrom, setInterestedFrom] = useState<"callbackReminder" | "whatsappFollowup" | null>(null);
   const [interestedFollowupLead, setInterestedFollowupLead] = useState<Lead | null>(null);
   const [greenBucketLead, setGreenBucketLead] = useState<Lead | null>(null);
   const [greenBucketRect, setGreenBucketRect] = useState<DOMRect | null>(null);
@@ -95,6 +133,12 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [callNowLead, setCallNowLead] = useState<Lead | null>(null);
   const [overdueCallLead, setOverdueCallLead] = useState<Lead | null>(null);
   const [callbackReminderFromOverdue, setCallbackReminderFromOverdue] = useState(false);
+  const [highlightLeadId, setHighlightLeadId] = useState<string | null>(null);
+  const [whatsappOpenedFromCallDialIncomingOff, setWhatsappOpenedFromCallDialIncomingOff] = useState(false);
+  /** Excel-like cell selection: { rowIndex, colIndex } or null. Arrow keys move; click to select. */
+  const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; colIndex: number } | null>(null);
+  /** Incoming Off + WhatsApp collaboration: expanded row id for drawer (click center "CB" pill to toggle). */
+  const [expandedCollaborationLeadId, setExpandedCollaborationLeadId] = useState<string | null>(null);
 
   const handleExhaustMoveComplete = useCallback(() => {
     setExhaustPhase("slide");
@@ -150,14 +194,9 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const hasCallbacks = leads.some((l) => l.callbackTime);
   useCurrentTime(!!hasCallbacks);
 
-  /** WhatsApp Flow Active tag: tag + callback, or legacy Incoming Off + whatsappFollowupStartedAt / tags "WhatsApp No Reply". */
-  const isWhatsAppFollowupLead = (l: Lead) =>
-    !!l.callbackTime &&
-    (l.tags === "WhatsApp Flow Active" ||
-      (l.tags === "Incoming Off" && !!l.whatsappFollowupStartedAt) ||
-      (l as { tags: string }).tags === "WhatsApp No Reply");
-  const isFollowupActive = (l: Lead) =>
-    !!l.callbackTime && (l.tags === "Incoming Off" || l.tags === "WhatsApp Flow Active");
+  /** WhatsApp follow-up: violet card. From getCallbackFlowType only — do not branch on lead.tags elsewhere. */
+  const isWhatsAppFollowupLead = (l: Lead) => getCallbackFlowType(l) === "whatsapp_followup";
+  const isFollowupActive = (l: Lead) => getCallbackFlowType(l) === "whatsapp_followup";
 
   /** Blink starts 30 sec before callback, until grace period ends */
   const isBlinkTime = (cb: string) => {
@@ -184,31 +223,70 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     return d <= now && now <= new Date(d.getTime() + 2 * 60 * 60 * 1000);
   };
 
+  /** Group order: 1 = Overdue, 2 = Call now, 3 = Follow up, 4 = Interested (incl. Interested Followup), 5 = Fresh. */
+  const getLeadGroupOrder = (l: Lead): number => {
+    if (isOverdue(l)) return 1;
+    const isInterested = l.flow === "Connected" && (l.tags === "Interested" || String(l.tags) === "Document received");
+    if (isInterested) return 4;
+    if (l.callbackTime?.trim()) {
+      const cbMs = new Date(l.callbackTime.trim()).getTime();
+      if (Number.isFinite(cbMs)) {
+        const now = Date.now();
+        const graceEnd = cbMs + GRACE_PERIOD_HOURS * 60 * 60 * 1000;
+        if (now > graceEnd) return 1;
+        if (now >= cbMs && now <= graceEnd) return 2; // call now
+        if (now < cbMs) return 3; // follow up
+      }
+    }
+    return 5; // fresh
+  };
+
   const blinkingLeadId = leads.find((l) => l.callbackTime && isBlinkTime(l.callbackTime))?.id;
   const scrolledToRef = useRef<string | null>(null);
 
-  /** Overdue at very top, then blinking, then callback, then rest (overdue = global rule) */
+  /** Group order: Overdue → Call now → Follow up → Interested → Fresh. Within group, sort by callback time then by id so order is stable (avoids countdown jump when modal closes). */
   const sortedLeads = [...leads].sort((a, b) => {
-    const aOverdue = isOverdue(a);
-    const bOverdue = isOverdue(b);
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return 1;
-    const aBlink = a.callbackTime && isBlinkTime(a.callbackTime);
-    const bBlink = b.callbackTime && isBlinkTime(b.callbackTime);
-    if (aBlink && !bBlink) return -1;
-    if (!aBlink && bBlink) return 1;
-    if (aBlink && bBlink) {
-      const aTime = new Date(a.callbackTime!).getTime();
-      const bTime = new Date(b.callbackTime!).getTime();
-      return aTime - bTime;
+    const ga = getLeadGroupOrder(a);
+    const gb = getLeadGroupOrder(b);
+    if (ga !== gb) return ga - gb;
+    if (ga <= 3 && a.callbackTime && b.callbackTime) {
+      const at = new Date(a.callbackTime).getTime();
+      const bt = new Date(b.callbackTime).getTime();
+      if (at !== bt) return at - bt;
     }
-    if (a.category === "callback" && b.category !== "callback") return -1;
-    if (a.category !== "callback" && b.category === "callback") return 1;
-    return 0;
+    return (a.id ?? "").localeCompare(b.id ?? "");
   });
 
   const firstOverdueLeadId = sortedLeads.find((l) => isOverdue(l))?.id ?? null;
   const prevFirstOverdueRef = useRef<string | null>(null);
+  const sortedLeadsRef = useRef<Lead[]>([]);
+  sortedLeadsRef.current = sortedLeads;
+
+  const openRowModal = useCallback((lead: Lead) => {
+    const effectiveTag = getEffectiveTag(lead.note, lead.tags);
+    const tagsNorm = String(lead.tags ?? "").trim();
+    const flowNorm = String(lead.flow ?? "").trim().toLowerCase();
+    const scheduleableTag = lead.tags !== "" && TAGS_SCHEDULEABLE_CALLBACK.includes(lead.tags as TagOption);
+    const incompleteNotConnected = (flowNorm === "not connected" || flowNorm === "select") && scheduleableTag && !lead.callbackTime;
+    const isFresh = (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select")) || incompleteNotConnected;
+    const isIncomingOffClickable = lead.flow === "Not Connected" && effectiveTag === "Incoming Off";
+    if (isOverdue(lead)) {
+      if (getCallbackFlowType(lead) === "whatsapp_followup") setFollowupLead(lead);
+      else if (effectiveTag === "Incoming Off") {
+        setWhatsappOpenedFromCallDialIncomingOff(false);
+        setWhatsappLead(lead);
+      } else setOverdueCallLead(lead);
+    } else if ((lead.tags === "Interested" || String(lead.tags) === "Document received") && lead.callbackTime) setInterestedFollowupLead(lead);
+    else if (getCallbackFlowType(lead) === "whatsapp_followup") setFollowupLead(lead);
+    else if (lead.callbackTime) setCallbackReminderLead(lead);
+    else if (isFresh) setCallDialLead(lead);
+    else if (effectiveTag === "Incoming Off") setCallDialLead(lead);
+    else if (isIncomingOffClickable) {
+      setWhatsappOpenedFromCallDialIncomingOff(false);
+      setWhatsappLead(lead);
+    }
+  }, []);
+
 
   useEffect(() => {
     if (!firstOverdueLeadId) {
@@ -266,8 +344,44 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const bodyTableRef = useRef<HTMLTableElement>(null);
 
-  /* Column widths: ID, Source, Name, Place, Number, Flow/Tag/Action, Sub tags, Notes (manual edit icon) */
-  const colWidths = ["8%", "9%", "11%", "9%", "11%", "27%", "20%", "5%"];
+  const COL_COUNT = 8;
+  useEffect(() => {
+    if (!selectedCell) return;
+    const rowCount = leads.length;
+    const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      if (e.key === "Enter" && !isInput) {
+        e.preventDefault();
+        if (selectedCell.colIndex !== 5) return;
+        const lead = sortedLeadsRef.current[selectedCell.rowIndex];
+        if (lead) openRowModal(lead);
+        return;
+      }
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        const nextRowIndex = e.key === "ArrowUp" ? Math.max(0, selectedCell.rowIndex - 1) : Math.min(rowCount - 1, selectedCell.rowIndex + 1);
+        const lead = sortedLeadsRef.current[nextRowIndex];
+        if (lead) rowRefs.current[lead.id]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+      setSelectedCell((prev) => {
+        if (!prev) return null;
+        switch (e.key) {
+          case "ArrowUp": return { ...prev, rowIndex: Math.max(0, prev.rowIndex - 1) };
+          case "ArrowDown": return { ...prev, rowIndex: Math.min(rowCount - 1, prev.rowIndex + 1) };
+          case "ArrowLeft": return { ...prev, colIndex: Math.max(0, prev.colIndex - 1) };
+          case "ArrowRight": return { ...prev, colIndex: Math.min(COL_COUNT - 1, prev.colIndex + 1) };
+          default: return prev;
+        }
+      });
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [selectedCell, leads.length, openRowModal]);
+
+  /* Column widths: ID, Source, Name, Place, Number, Flow/Tag/Action, Sub flow, Notes (manual edit icon). Flow column wider so callback time doesn’t clip. */
+  const colWidths = ["12%", "8%", "10%", "8%", "10%", "28%", "18%", "6%"];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-lg">
@@ -290,13 +404,13 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap rounded-tl-lg border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">ID</th>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Source</th>
+              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap rounded-tl-lg border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">ID / Source</th>
+              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Token</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Name</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Place</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Number</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Flow / Tag / Action</th>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Sub tags</th>
+              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Sub flow</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap rounded-tr-lg border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-1.5 py-1.5 text-left text-[11px] font-semibold text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]" title="Notes">
                 <span className="inline-flex items-center justify-center w-full">
                   <svg className="h-3.5 w-3.5 shrink-0 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -307,11 +421,12 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             </tr>
           </thead>
           <tbody className="divide-y-2 divide-slate-200 bg-white">
-          {sortedLeads.map((lead) => {
+          {sortedLeads.map((lead, rowIndex) => {
             const shouldBlink = lead.callbackTime && isBlinkTime(lead.callbackTime);
             const isExhausting = exhaustingLead?.id === lead.id;
             const isReviewing = reviewingLead?.id === lead.id;
             const isGreenBucketing = greenBucketLead?.id === lead.id;
+            const isCollaborationHighlight = highlightLeadId === lead.id;
             const exhaustRowClass = isExhausting
               ? exhaustPhase === "move"
                 ? "animate-exhaust-blink"
@@ -336,10 +451,14 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select")) ||
               incompleteNotConnected;
             const effectiveTag = getEffectiveTag(lead.note, lead.tags);
-            const displayTag = isWhatsAppFollowupLead(lead) ? "WhatsApp Flow Active" : effectiveTag;
-            const displaySubTag = isWhatsAppFollowupLead(lead)
-              ? getWhatsAppSubTag(lead.note) || (lead.tags === "Incoming Off" && lead.whatsappFollowupStartedAt ? "WhatsApp No Reply" : "")
-              : "";
+            const displayTag = isWhatsAppFollowupLead(lead)
+              ? "WhatsApp Flow Active"
+              : (String(effectiveTag) === "Document received" ? "Interested" : effectiveTag);
+            const displaySubFlow = isWhatsAppFollowupLead(lead)
+              ? getWhatsAppSubFlow(lead.note) || (lead.tags === "Incoming Off" && lead.whatsappFollowupStartedAt ? "WhatsApp No Reply" : "")
+              : (lead.flow === "Connected" && (lead.tags === "Interested" || String(lead.tags) === "Document received"))
+                ? getInterestedSubFlow(lead.note, lead.tags)
+                : "";
             const tagHistory = getTagHistory(lead.note);
             const hasIncomingOffInCycle = tagHistory.some((entry) => entry.startsWith("Incoming Off"));
             // Show [Incoming Off] ↔ [WhatsApp Flow Active] when we're showing WhatsApp Flow Active with callback (countdown or overdue), or when Not Connected + followup with Incoming Off in history.
@@ -352,6 +471,17 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 : isFollowupActive(lead));
             const isIncomingOffClickable =
               lead.flow === "Not Connected" && effectiveTag === "Incoming Off";
+            const resolvedDisplayTag =
+              displayTag === "Incoming Off" && !showIncomingOffCollaborate ? "" : displayTag;
+            // Callback card (No Answer cycle): always show a tag — never blank (use lead.tags / effectiveTag fallback so tag is never missing)
+            const callbackCardTag =
+              resolvedDisplayTag || (lead.tags?.trim() ?? "") || effectiveTag || "—";
+            // Interested + sub-flow (action in note or legacy Document received) → we show the followup card; Document received is sub-flow not tag
+            const interestedActionFromNote =
+              lead.flow === "Connected" && (lead.tags === "Interested" || String(lead.tags) === "Document received")
+                ? getInterestedSubFlow(lead.note, lead.tags)
+                : "";
+            const showInterestedFollowupCard = !!interestedActionFromNote;
             const isRowClickable =
               isFresh || isOverdue(lead) || lead.callbackTime || isIncomingOffClickable;
             return (
@@ -361,64 +491,51 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 rowRefs.current[lead.id] = el;
               }}
               role={isRowClickable ? "button" : undefined}
-              tabIndex={isRowClickable ? 0 : undefined}
-              onClick={() => {
-                // Overdue: Incoming Off → open WhatsApp (Try WhatsApp); others → OverdueCallModal (call now)
-                if (isOverdue(lead)) {
-                  if (effectiveTag === "Incoming Off") setWhatsappLead(lead);
-                  else setOverdueCallLead(lead);
-                } else if (isFresh) setCallDialLead(lead);
-                else if (isIncomingOffClickable) setWhatsappLead(lead);
-                else if (lead.tags === "Interested" && lead.callbackTime) setInterestedFollowupLead(lead);
-                else if (lead.callbackTime) setCallbackReminderLead(lead);
+              onDoubleClick={() => {
+                if (isRowClickable && selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 5) openRowModal(lead);
               }}
-              onKeyDown={
-                isRowClickable
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        if (isOverdue(lead)) {
-                          if (effectiveTag === "Incoming Off") setWhatsappLead(lead);
-                          else setOverdueCallLead(lead);
-                        } else if (isFresh) setCallDialLead(lead);
-                        else if (isIncomingOffClickable) setWhatsappLead(lead);
-                        else if (lead.tags === "Interested" && lead.callbackTime) setInterestedFollowupLead(lead);
-                        else if (lead.callbackTime) setCallbackReminderLead(lead);
-                      }
-                    }
-                  : undefined
-              }
-              className={`group transition-colors duration-150 ${
+              className={`group scroll-mt-8 transition-colors duration-150 ${
                 isRowClickable ? "cursor-pointer " : ""
               }${
                 exhaustRowClass ?? reviewRowClass ?? greenBucketRowClass ??
                   (isOverdue(lead)
                     ? "animate-overdue-blink hover:!bg-red-100"
-                    : shouldBlink
-                      ? "animate-callback-blink hover:!bg-amber-100"
-                      : lead.category === "callback"
-                        ? "bg-amber-50 hover:bg-amber-100"
-                        : isIncomingOffClickable
-                          ? "hover:bg-sky-50"
-                          : "hover:bg-slate-50")
-              }`}
+                    : shouldBlink && isWhatsAppFollowupLead(lead)
+                      ? "animate-followup-sweep hover:!bg-violet-100"
+                      : shouldBlink
+                        ? "animate-callback-blink hover:!bg-amber-100"
+                        : lead.category === "callback" || showInterestedFollowupCard
+                          ? "bg-amber-50 hover:bg-amber-100"
+                          : isIncomingOffClickable
+                            ? "hover:bg-sky-50"
+                            : "hover:bg-slate-50")
+              }${isCollaborationHighlight ? " !bg-emerald-100 ring-2 ring-emerald-400 ring-inset animate-pulse shadow-[inset_0_0_0_2px_rgba(52,211,153,0.5)]" : ""}`}
             >
               <td
                 className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs font-mono text-slate-900 transition-colors duration-150 ${
-                  isOverdue(lead)
+                  selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 0 ? "ring-2 ring-blue-500 ring-inset" : ""
+                } ${
+                  isCollaborationHighlight
+                    ? "bg-emerald-100/90 group-hover:bg-emerald-100"
+                    : isOverdue(lead)
                     ? "bg-transparent group-hover:!bg-red-100"
-                    : shouldBlink
-                      ? "bg-transparent group-hover:!bg-amber-100"
-                      : lead.category === "callback"
-                        ? "bg-amber-50 group-hover:bg-amber-100"
-                        : isIncomingOffClickable
-                          ? "bg-white group-hover:bg-sky-50"
-                          : "bg-white group-hover:bg-slate-50"
+                    : shouldBlink && isWhatsAppFollowupLead(lead)
+                      ? "bg-transparent group-hover:!bg-violet-100"
+                      : shouldBlink
+                        ? "bg-transparent group-hover:!bg-amber-100"
+                        : lead.category === "callback" || showInterestedFollowupCard
+                          ? "bg-amber-50 group-hover:bg-amber-100"
+                          : isIncomingOffClickable
+                            ? "bg-white group-hover:bg-sky-50"
+                            : "bg-white group-hover:bg-slate-50"
                 }`}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 0 }); }}
               >
-                <div className="flex items-center gap-1">
-                  <span>{lead.id.slice(0, 8)}</span>
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-slate-900">{getDisplayId(lead.id)}</span>
+                    {lead.source ? <span className="block truncate text-[11px] font-normal text-slate-500">{lead.source}</span> : null}
+                  </span>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -436,10 +553,10 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                   </button>
                 </div>
               </td>
-              <td className="overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800">{lead.source}</td>
-              <td className="overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800">{lead.name}</td>
-              <td className="overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800">{lead.place}</td>
-              <td className="overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800">
+              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 1 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 1 }); }}>{lead.token ?? ""}</td>
+              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 2 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 2 }); }}>{lead.name}</td>
+              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 3 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 3 }); }}>{lead.place}</td>
+              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 4 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 4 }); }}>
                 {lead.number.includes(" (Calling)") || lead.number.includes(" (WhatsApp)") ? (
                   <div className="flex flex-col gap-0.5">
                     {lead.number.split(", ").map((part, i) => (
@@ -450,62 +567,101 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                   lead.number
                 )}
               </td>
-              <td className="overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle">
+              <td className={`overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 5 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId && !(e.target as HTMLElement).closest("[data-collaboration-block]")) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 5 }); if (isRowClickable && !(e.target as HTMLElement).closest("button")) openRowModal(lead); }}>
                 {/* Single line: tag, action note, badges, buttons, countdown */}
-                <div className="flex min-w-0 flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {(!isFresh || lead.callbackTime) && !(isOverdue(lead) && lead.callbackTime && lead.tags !== "Interested" && !isWhatsAppFollowupLead(lead)) && (
+                <div className="flex min-w-0 flex-wrap items-center gap-2" onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId && !(e.target as HTMLElement).closest("[data-collaboration-block]")) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 5 }); if (!(e.target as HTMLElement).closest("button")) openRowModal(lead); }}>
+                  {(!isFresh || lead.callbackTime) && !(lead.callbackTime && lead.tags !== "Interested" && !isWhatsAppFollowupLead(lead)) && (
                     <>
                     {showIncomingOffCollaborate ? (
-                      <>
-                        <span className="inline-flex flex-nowrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 shadow-sm">
-                          <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS["Incoming Off"]}`}>
-                            Incoming Off
+                      <span data-collaboration-block className="inline-flex items-center gap-2">
+                        {expandedCollaborationLeadId === lead.id ? (
+                          <>
+                          <span className={`relative inline-flex h-[30px] flex-nowrap items-center gap-1.5 rounded-lg border pl-4 pr-2 py-1 shadow-sm ${isOverdue(lead) ? "border-red-200/80 bg-red-50/70" : "border-slate-200 bg-slate-50"}`}>
+                            {getLastAttemptForTag(lead.note, "Incoming Off") >= ATTEMPT_BADGE_MIN && (
+                              <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getLastAttemptForTag(lead.note, "Incoming Off")}`}>{getLastAttemptForTag(lead.note, "Incoming Off")}</span>
+                            )}
+                            <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS["Incoming Off"]}`}>
+                              <TagIcon tag="Incoming Off" className="h-3 w-3 shrink-0" />
+                              Incoming Off
+                            </span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedCollaborationLeadId(null); }} title="Collapse" className="shrink-0 inline-flex rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600">
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <circle cx="6" cy="12" r="2" strokeWidth={2} />
+                                <circle cx="18" cy="12" r="2" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeWidth={2} d="M8 12h8" />
+                              </svg>
+                            </button>
+                            <span className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-full py-0.5 text-[11px] font-bold ${getLastAttemptForTag(lead.note, "WhatsApp Flow Active") >= ATTEMPT_BADGE_MIN ? ATTEMPT_BADGE_PILL_PADDING : "px-2"} ${TAG_TEXT_COLORS["WhatsApp Flow Active"]}`}>
+                              {getLastAttemptForTag(lead.note, "WhatsApp Flow Active") >= ATTEMPT_BADGE_MIN && (
+                                <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getLastAttemptForTag(lead.note, "WhatsApp Flow Active")}`}>{getLastAttemptForTag(lead.note, "WhatsApp Flow Active")}</span>
+                              )}
+                              <TagIcon tag="WhatsApp Flow Active" className="h-3 w-3 shrink-0" />
+                              WhatsApp Flow Active
+                            </span>
                           </span>
-                          <span title="Collaborate" className="shrink-0 inline-flex">
-                            <svg className="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                              <circle cx="6" cy="12" r="2" strokeWidth={2} />
-                              <circle cx="18" cy="12" r="2" strokeWidth={2} />
-                              <path strokeLinecap="round" strokeWidth={2} d="M8 12h8" />
-                            </svg>
-                          </span>
-                          <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS["WhatsApp Flow Active"]}`}>
-                            <WhatsAppIcon className="h-3.5 w-3.5" />
-                            WhatsApp Flow Active
-                          </span>
-                        </span>
-                        {lead.callbackTime && isWhatsAppFollowupLead(lead) && (
-                          <span className="h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+                          {isOverdue(lead) && (
+                            <span className="self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-red-300" aria-hidden />
+                          )}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setExpandedCollaborationLeadId(lead.id); }}
+                            className={`relative inline-flex h-[30px] flex-nowrap items-center gap-2 rounded-lg border py-1 shadow-sm ${getDisplayAttemptForTag(lead.note, "Incoming Off", !!lead.callbackTime) >= ATTEMPT_BADGE_MIN ? "pl-4 pr-2" : "px-2"} ${isOverdue(lead) ? "border-red-200/80 bg-red-50/70 hover:bg-red-100/80" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
+                            title="Incoming Off + WhatsApp Flow Active — click to expand"
+                          >
+                            {getDisplayAttemptForTag(lead.note, "Incoming Off", !!lead.callbackTime) >= ATTEMPT_BADGE_MIN && (
+                              <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getDisplayAttemptForTag(lead.note, "Incoming Off", !!lead.callbackTime)}`}>{getDisplayAttemptForTag(lead.note, "Incoming Off", !!lead.callbackTime)}</span>
+                            )}
+                            <span className="shrink-0 inline-flex items-center gap-0.5 text-sky-600" title="Incoming Off">
+                              <TagIcon tag="Incoming Off" className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="shrink-0 inline-flex text-slate-400" title="Collaborate">
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <circle cx="6" cy="12" r="2" strokeWidth={2} />
+                                <circle cx="18" cy="12" r="2" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeWidth={2} d="M8 12h8" />
+                              </svg>
+                            </span>
+                            <span className={`relative shrink-0 inline-flex items-center gap-0.5 text-emerald-600 ${getDisplayAttemptForTag(lead.note, "WhatsApp Flow Active", !!lead.callbackTime) >= ATTEMPT_BADGE_MIN ? "pl-4" : ""}`} title="WhatsApp Flow Active">
+                              {getDisplayAttemptForTag(lead.note, "WhatsApp Flow Active", !!lead.callbackTime) >= ATTEMPT_BADGE_MIN && (
+                                <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getDisplayAttemptForTag(lead.note, "WhatsApp Flow Active", !!lead.callbackTime)}`}>{getDisplayAttemptForTag(lead.note, "WhatsApp Flow Active", !!lead.callbackTime)}</span>
+                              )}
+                              <TagIcon tag="WhatsApp Flow Active" className="h-3.5 w-3.5" />
+                            </span>
+                          </button>
                         )}
-                      </>
-                    ) : (
+                      </span>
+                    ) : resolvedDisplayTag && (resolvedDisplayTag !== "Interested" || !showInterestedFollowupCard) ? (
                     <span
-                      className={
-                        displayTag
-                          ? `inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS[displayTag as TagOption] ?? SUBTAG_TEXT_COLORS[displayTag] ?? "text-neutral-700"}`
-                          : "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-neutral-500"
-                      }
+                      className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-full py-0.5 text-[11px] font-bold ${getLastAttemptForTag(lead.note, resolvedDisplayTag) >= ATTEMPT_BADGE_MIN ? ATTEMPT_BADGE_PILL_PADDING : "px-2"} ${TAG_TEXT_COLORS[resolvedDisplayTag as TagOption] ?? SUBFLOW_TEXT_COLORS[resolvedDisplayTag] ?? "text-neutral-800"}`}
                     >
-                      {displayTag || "—"}
+                      {getLastAttemptForTag(lead.note, resolvedDisplayTag) >= ATTEMPT_BADGE_MIN && (
+                        <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getLastAttemptForTag(lead.note, resolvedDisplayTag)}`}>{getLastAttemptForTag(lead.note, resolvedDisplayTag)}</span>
+                      )}
+                      <TagIcon tag={resolvedDisplayTag} className="h-3 w-3 shrink-0" />
+                      {resolvedDisplayTag}
                     </span>
-                    )}
-                    {isOverdue(lead) && (
-                      <span className="h-4 w-px shrink-0 bg-red-200" aria-hidden />
+                    ) : null}
+                    {isOverdue(lead) && !showIncomingOffCollaborate && (
+                      <span className="self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-red-300" aria-hidden />
                     )}
                     </>
                   )}
-                    {/* WhatsApp No Reply + callback: single action = Followup (countdown + button). No Callback badge. */}
-                    {lead.callbackTime && isWhatsAppFollowupLead(lead) && (
-                      <span className="inline-flex flex-nowrap items-center rounded-lg border border-violet-200/80 bg-violet-50/70 px-2 py-1 shadow-sm">
+                    {/* WhatsApp follow-up: violet card (from getCallbackFlowType only). */}
+                    {getCallbackFlowType(lead) === "whatsapp_followup" && (
+                      <span className="inline-flex h-[30px] flex-nowrap items-center rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-sm">
                         <CallbackCountdown
                           callbackTime={lead.callbackTime}
                           isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
                           badgeLabel={ACTION_LABELS.followup}
+                          badgeVariant="violet"
                           inline
                           renderCallNow={
                             <button
                               type="button"
                               onClick={() => setFollowupLead(lead)}
-                              className="w-fit rounded bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm hover:bg-violet-600"
+                              className="w-fit rounded border border-violet-600 bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm hover:bg-violet-700 hover:border-violet-700"
                             >
                               {ACTION_LABELS.followup}
                             </button>
@@ -513,20 +669,24 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                         />
                       </span>
                     )}
-                    {/* No Answer cycle etc. + callback: single action = Callback only. Overdue = one card (tag + overdue block). */}
-                    {lead.callbackTime && lead.tags !== "Interested" && !isWhatsAppFollowupLead(lead) && (
+                    {/* No Answer cycle only: from getCallbackFlowType. */}
+                    {getCallbackFlowType(lead) === "no_answer_callback" && (
                       isOverdue(lead) ? (
-                        <span className="inline-flex min-w-0 max-w-full flex-nowrap items-center gap-2 rounded-lg border border-red-200 bg-red-50/80 px-2 py-1 shadow-sm">
+                        <span className={CALLBACK_CARD_OVERDUE_CLASS}>
+                          {callbackCardTag !== "—" && (() => { const attempt = getDisplayAttemptForTag(lead.note, callbackCardTag, !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
+                            <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
+                          ); })()}
                           <span
                             className={
-                              displayTag
-                                ? `inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TAG_TEXT_COLORS[displayTag as TagOption] ?? SUBTAG_TEXT_COLORS[displayTag] ?? "text-neutral-700"}`
+                              callbackCardTag !== "—"
+                                ? `inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS[callbackCardTag as TagOption] ?? SUBFLOW_TEXT_COLORS[callbackCardTag] ?? "text-neutral-800"}`
                                 : "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-neutral-500"
                             }
                           >
-                            {displayTag || "—"}
+                            {callbackCardTag !== "—" && <TagIcon tag={callbackCardTag} className="h-3 w-3 shrink-0" />}
+                            {callbackCardTag}
                           </span>
-                          <span className="h-4 w-px shrink-0 bg-red-200" aria-hidden />
+                          <span className="self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-red-300" aria-hidden />
                           <CallbackCountdown
                             callbackTime={lead.callbackTime}
                             isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
@@ -541,35 +701,127 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                               </button>
                             }
                           />
+                          <TimelineInfoButton onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }} />
                         </span>
                       ) : (
-                        <CallbackCountdown
-                          callbackTime={lead.callbackTime}
-                          isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
-                          inline
-                          renderCallNow={
-                            <button
-                              type="button"
-                              onClick={() => setCallNowLead(lead)}
-                              className="w-fit rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950 hover:bg-amber-500"
-                            >
-                              {CALL_NOW_LABEL}
-                            </button>
-                          }
-                        />
+                        <span className={CALLBACK_CARD_AMBER_CLASS}>
+                          {callbackCardTag !== "—" && (() => { const attempt = getDisplayAttemptForTag(lead.note, callbackCardTag, !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
+                            <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
+                          ); })()}
+                          <span
+                            className={
+                              callbackCardTag !== "—"
+                                ? `inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS[callbackCardTag as TagOption] ?? SUBFLOW_TEXT_COLORS[callbackCardTag] ?? "text-neutral-800"}`
+                                : "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-neutral-500"
+                            }
+                          >
+                            {callbackCardTag !== "—" && <TagIcon tag={callbackCardTag} className="h-3 w-3 shrink-0" />}
+                            {callbackCardTag}
+                          </span>
+                          <span className={CALLBACK_CARD_AMBER_DIVIDER_CLASS} aria-hidden />
+                          <CallbackCountdown
+                            callbackTime={lead.callbackTime}
+                            isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
+                            inline
+                            renderCallNow={
+                              <button
+                                type="button"
+                                onClick={() => setCallNowLead(lead)}
+                                className="w-fit rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950 shadow-sm hover:bg-amber-500"
+                              >
+                                {CALL_NOW_LABEL}
+                              </button>
+                            }
+                          />
+                          <TimelineInfoButton onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }} />
+                        </span>
                       )
                     )}
-                    {lead.tags === "Interested" && lead.note && (() => {
-                      const actionParts = lead.note.split(" | ").filter((p) => p.startsWith(ACTION_NOTE_PREFIX));
-                      const actionPart = actionParts.length > 0 ? actionParts[actionParts.length - 1] : undefined;
-                      const action = actionPart?.startsWith(ACTION_NOTE_PREFIX) ? actionPart.slice(ACTION_NOTE_PREFIX.length).trim() : actionPart?.trim();
+                    {/* Other callback (legacy/other tag): from getCallbackFlowType — tag + countdown so cell never empty. */}
+                    {getCallbackFlowType(lead) === "other_callback" && (
+                      isOverdue(lead) ? (
+                        <span className={CALLBACK_CARD_OVERDUE_CLASS}>
+                          {callbackCardTag !== "—" && (() => { const attempt = getDisplayAttemptForTag(lead.note, callbackCardTag, !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
+                            <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
+                          ); })()}
+                          <span
+                            className={
+                              callbackCardTag !== "—"
+                                ? `inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS[callbackCardTag as TagOption] ?? SUBFLOW_TEXT_COLORS[callbackCardTag] ?? "text-neutral-800"}`
+                                : "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-neutral-500"
+                            }
+                          >
+                            {callbackCardTag !== "—" && <TagIcon tag={callbackCardTag} className="h-3 w-3 shrink-0" />}
+                            {callbackCardTag}
+                          </span>
+                          <span className="self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-red-300" aria-hidden />
+                          <CallbackCountdown
+                            callbackTime={lead.callbackTime}
+                            isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
+                            inline
+                            renderCallNow={
+                              <button
+                                type="button"
+                                onClick={() => setCallNowLead(lead)}
+                                className="w-fit rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950 hover:bg-amber-500"
+                              >
+                                {CALL_NOW_LABEL}
+                              </button>
+                            }
+                          />
+                          <TimelineInfoButton onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }} />
+                        </span>
+                      ) : (
+                        <span className={CALLBACK_CARD_AMBER_CLASS}>
+                          {callbackCardTag !== "—" && (() => { const attempt = getDisplayAttemptForTag(lead.note, callbackCardTag, !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
+                            <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
+                          ); })()}
+                          <span
+                            className={
+                              callbackCardTag !== "—"
+                                ? `inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS[callbackCardTag as TagOption] ?? SUBFLOW_TEXT_COLORS[callbackCardTag] ?? "text-neutral-800"}`
+                                : "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-neutral-500"
+                            }
+                          >
+                            {callbackCardTag !== "—" && <TagIcon tag={callbackCardTag} className="h-3 w-3 shrink-0" />}
+                            {callbackCardTag}
+                          </span>
+                          <span className={CALLBACK_CARD_AMBER_DIVIDER_CLASS} aria-hidden />
+                          <CallbackCountdown
+                            callbackTime={lead.callbackTime}
+                            isBlinking={!!(lead.callbackTime && isBlinkTime(lead.callbackTime))}
+                            inline
+                            renderCallNow={
+                              <button
+                                type="button"
+                                onClick={() => setCallbackReminderLead(lead)}
+                                className="w-fit rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950 shadow-sm hover:bg-amber-500"
+                              >
+                                {CALL_NOW_LABEL}
+                              </button>
+                            }
+                          />
+                          <TimelineInfoButton onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }} />
+                        </span>
+                      )
+                    )}
+                    {showInterestedFollowupCard && (() => {
+                      const action = interestedActionFromNote;
                       const isDefaultFollowupAction = action === INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR;
                       const showCountdown = lead.callbackTime || isDefaultFollowupAction;
                       return action ? (
-                        <div className="inline-flex flex-wrap items-center gap-2">
+                        <span className={CALLBACK_CARD_AMBER_CLASS}>
+                          {(() => { const attempt = getDisplayAttemptForTag(lead.note, "Interested", !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
+                            <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
+                          ); })()}
+                          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ${TAG_TEXT_COLORS["Interested"]}`}>
+                            <TagIcon tag="Interested" className="h-3 w-3 shrink-0" />
+                            Interested
+                          </span>
+                          <span className={CALLBACK_CARD_AMBER_DIVIDER_CLASS} aria-hidden />
                           {showCountdown &&
                             (lead.callbackTime ? (
-                              <div className="flex flex-nowrap items-center gap-2">
+                              <>
                                 <button
                                   type="button"
                                   onClick={() => setInterestedFollowupLead(lead)}
@@ -594,7 +846,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                                     ) : undefined
                                   }
                                 />
-                              </div>
+                              </>
                             ) : (
                               <Default1hrCountdown onFollowupClick={() => setInterestedFollowupLead(lead)} />
                             ))}
@@ -607,26 +859,33 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                               {ACTION_LABELS.followup}
                             </button>
                           )}
-                        </div>
+                          <TimelineInfoButton onClick={(e) => { e.stopPropagation(); setDetailLead(lead); }} />
+                        </span>
                       ) : null;
                     })()}
                 </div>
               </td>
-              <td className="max-w-0 overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle text-xs text-slate-600" title={displaySubTag || undefined}>
-                <span className="block min-w-0 truncate">
-                  {displaySubTag}
-                </span>
+              <td className={`max-w-0 overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle text-xs ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 6 ? "ring-2 ring-blue-500 ring-inset" : ""}`} title={displaySubFlow ?? undefined} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 6 }); }}>
+                {displaySubFlow ? (
+                  <span className={`relative inline-flex min-w-0 max-w-full items-center gap-1.5 truncate rounded-full py-0.5 text-[11px] font-bold ${getLastAttemptForTag(lead.note, displaySubFlow) >= ATTEMPT_BADGE_MIN ? ATTEMPT_BADGE_PILL_PADDING : "px-2"} ${SUBFLOW_TEXT_COLORS[displaySubFlow] ?? "text-slate-700"}`}>
+                    {getLastAttemptForTag(lead.note, displaySubFlow) >= ATTEMPT_BADGE_MIN && (
+                      <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${getLastAttemptForTag(lead.note, displaySubFlow)}`}>{getLastAttemptForTag(lead.note, displaySubFlow)}</span>
+                    )}
+                    <TagIcon tag={displaySubFlow} className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 truncate">{displaySubFlow}</span>
+                  </span>
+                ) : null}
               </td>
-              <td className="max-w-0 overflow-hidden border-r-2 border-slate-200 px-1.5 py-1.5 align-middle text-xs text-slate-600" onClick={(e) => e.stopPropagation()} title="Add or edit note">
+              <td className={`group/cell max-w-0 overflow-hidden border-r-2 border-slate-600 bg-slate-800 px-1.5 py-1.5 align-middle text-xs ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 7 ? "ring-2 ring-blue-500 ring-inset" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 7 }); }} title="Add or edit note">
                 <div className="flex min-w-0 items-center justify-center">
                   <button
                     type="button"
                     onClick={() => setNoteEditLead(lead)}
-                    className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-300"
+                    className="shrink-0 rounded-md bg-slate-700/60 p-1.5 text-white opacity-0 transition-all duration-200 group-hover/cell:opacity-100 group-hover/cell:bg-slate-700 hover:bg-slate-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1 focus:ring-offset-slate-800"
                     title="Add or edit note"
                     aria-label="Add or edit note"
                   >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                   </button>
@@ -757,10 +1016,10 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             setCallDialLead(null);
             setInvalidLead(l);
           }}
-          onIncomingOffSaved={(updatedLead) => {
+          onIncomingOffClick={(lead) => {
             setCallDialLead(null);
-            onRefresh();
-            setWhatsappLead(updatedLead);
+            setWhatsappOpenedFromCallDialIncomingOff(true);
+            setWhatsappLead(lead);
           }}
         />
       )}
@@ -791,6 +1050,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             setCallbackReminderLead(null);
             setCallNowLead(null);
             setInterestedLead(l);
+            setInterestedFrom("callbackReminder");
           }}
           onConnectNotInterested={(l) => {
             setNotInterestedFrom(callbackReminderLead ? "callbackReminder" : "callNow");
@@ -835,14 +1095,39 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           number={whatsappLead.number}
           id={whatsappLead.id}
           note={whatsappLead.note}
-          onClose={() => setWhatsappLead(null)}
-          onSuccess={(movedToExhaust) => {
-            if (movedToExhaust) {
-              const rect = rowRefs.current[movedToExhaust.id]?.getBoundingClientRect() ?? null;
+          openedFromCallDialIncomingOff={whatsappOpenedFromCallDialIncomingOff}
+          onClose={() => {
+            setWhatsappOpenedFromCallDialIncomingOff(false);
+            setWhatsappLead(null);
+            onRefresh();
+          }}
+          onBack={
+            whatsappOpenedFromCallDialIncomingOff && whatsappLead
+              ? () => {
+                  const l = whatsappLead;
+                  setWhatsappLead(null);
+                  setWhatsappOpenedFromCallDialIncomingOff(false);
+                  if (l) setCallDialLead(l);
+                }
+              : undefined
+          }
+          onSuccess={(result) => {
+            if (result && "noReply" in result && result.noReply) {
+              setWhatsappLead(null);
+              setHighlightLeadId(result.id);
+              onRefresh();
+              setTimeout(() => setHighlightLeadId(null), 2500);
+              setTimeout(() => {
+                rowRefs.current[result.id]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }, 50);
+              return;
+            }
+            if (result && "tags" in result) {
+              const rect = rowRefs.current[result.id]?.getBoundingClientRect() ?? null;
               setExhaustPhase("move");
               setExhaustingLead({
                 ...whatsappLead,
-                tags: movedToExhaust.tags as Lead["tags"],
+                tags: result.tags as Lead["tags"],
               });
               setExhaustRect(rect);
             } else {
@@ -854,12 +1139,24 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
       )}
       {followupLead && (
         <WhatsAppFollowupModal
+          lead={followupLead}
           leadName={followupLead.name}
           number={followupLead.number}
           id={followupLead.id}
           whatsappFollowupStartedAt={followupLead.whatsappFollowupStartedAt}
           onClose={() => setFollowupLead(null)}
           onSuccess={onRefresh}
+          onConnectInterested={(l) => {
+            setFollowupLead(null);
+            setInterestedLead(l);
+            setInterestedFrom("whatsappFollowup");
+            onRefresh();
+          }}
+          onConnectNotInterested={(l) => {
+            setNotInterestedFrom("whatsappFollowup");
+            setFollowupLead(null);
+            setNotInterestedLead(l);
+          }}
         />
       )}
       {notInterestedLead && (
@@ -881,6 +1178,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                   if (lead && notInterestedFrom === "callNow") setCallNowLead(lead);
                   if (lead && notInterestedFrom === "callbackReminder") setCallbackReminderLead(lead);
                   if (lead && notInterestedFrom === "interestedFollowup") setInterestedFollowupLead(lead);
+                  if (lead && notInterestedFrom === "whatsappFollowup") setFollowupLead(lead);
                 }
               : undefined
           }
@@ -965,7 +1263,22 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           leadPlace={interestedLead.place}
           leadNumber={interestedLead.number}
           id={interestedLead.id}
-          onClose={() => setInterestedLead(null)}
+          onClose={() => {
+            setInterestedLead(null);
+            setInterestedFrom(null);
+          }}
+          onBack={
+            interestedFrom
+              ? () => {
+                  const lead = interestedLead;
+                  const from = interestedFrom;
+                  setInterestedLead(null);
+                  setInterestedFrom(null);
+                  if (lead && from === "callbackReminder") setCallbackReminderLead(lead);
+                  if (lead && from === "whatsappFollowup") setFollowupLead(lead);
+                }
+              : undefined
+          }
           onConfirm={async (result) => {
             if (!result.hasPassport) {
               const note = appendTagHistory(NO_PASSPORT_SCRIPT, "Interested");
@@ -985,6 +1298,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               }
               const rect = rowRefs.current[interestedLead.id]?.getBoundingClientRect() ?? null;
               setInterestedLead(null);
+              setInterestedFrom(null);
               setReviewPhase("move");
               setReviewingLead({ ...interestedLead, tags: "Interested" });
               setReviewRect(rect);
@@ -1047,6 +1361,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                 throw new Error(data.error || `Failed (${res.status})`);
               }
               setInterestedLead(null);
+              setInterestedFrom(null);
               if (result.action === "Document received") {
                 const rect = rowRefs.current[interestedLead.id]?.getBoundingClientRect() ?? null;
                 setGreenBucketPhase("move");

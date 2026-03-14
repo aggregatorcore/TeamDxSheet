@@ -1,28 +1,69 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { Lead } from "@/types/lead";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
+import { localDateTimeToISO } from "@/lib/dateUtils";
+import { useAppTimezone } from "@/components/AppTimezoneProvider";
 import { WHATSAPP_FOLLOWUP_HOURS, WHATSAPP_FOLLOWUP_MAX_DAYS } from "@/lib/constants";
 
+function formatDateForInput(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function formatTimeForInput(d: Date) {
+  return d.toTimeString().slice(0, 5);
+}
+
+type YesStep = "choice" | "another_input" | "connected";
+type NumberUsage = "only_whatsapp" | "calling" | "calling_and_whatsapp";
+
 interface WhatsAppFollowupModalProps {
+  /** Full lead (preferred). When provided, used for callbacks and number updates. */
+  lead?: Lead;
   leadName: string;
   number: string;
   id: string;
   whatsappFollowupStartedAt?: string;
   onClose: () => void;
   onSuccess: () => void;
+  onConnectInterested?: (lead: Lead) => void;
+  onConnectNotInterested?: (lead: Lead) => void;
+}
+
+function normalizeNumberForDisplay(num: string): string {
+  return num.replace(/\s*\([^)]*\)/g, "").trim().split(",")[0] ?? "";
 }
 
 export function WhatsAppFollowupModal({
+  lead: leadProp,
   leadName,
   number,
   id,
   whatsappFollowupStartedAt,
   onClose,
   onSuccess,
+  onConnectInterested,
+  onConnectNotInterested,
 }: WhatsAppFollowupModalProps) {
+  const lead = leadProp ?? { id, name: leadName, number, place: "", source: "", flow: "Not Connected", tags: "", callbackTime: "", assignedTo: "", category: "active" } as Lead;
   const [loading, setLoading] = useState(false);
   const [selectedOption, setSelectedOption] = useState<"yes" | "no" | null>(null);
+  const [yesStep, setYesStep] = useState<YesStep | null>(null);
+  const [anotherNumber, setAnotherNumber] = useState("");
+  const [numberUsage, setNumberUsage] = useState<NumberUsage | null>(null);
+  const [connectedLead, setConnectedLead] = useState<Lead | null>(null);
+  const [anotherNumberError, setAnotherNumberError] = useState<string | null>(null);
+  const [showCustomSchedule, setShowCustomSchedule] = useState(false);
+  const { utcOffsetMinutes } = useAppTimezone();
+  const defaultSchedule = new Date(Date.now() + WHATSAPP_FOLLOWUP_HOURS * 60 * 60 * 1000);
+  const [customDate, setCustomDate] = useState(() => formatDateForInput(defaultSchedule));
+  const [customTime, setCustomTime] = useState(() => formatTimeForInput(defaultSchedule));
+  const [customScheduleError, setCustomScheduleError] = useState<string | null>(null);
+  const now = new Date();
+  const today = formatDateForInput(now);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -37,18 +78,88 @@ export function WhatsAppFollowupModal({
   const noButtonText =
     daysPassed >= WHATSAPP_FOLLOWUP_MAX_DAYS ? "Hide lead (2 days passed)" : "Schedule next followup (1 hr)";
 
-  const handleYes = async () => {
+  const handleSameNumberContinue = () => {
+    // No PATCH, no tag: "Same number" is just the answer to the question. Tag is applied only when user picks Interested or Not Interested.
+    setConnectedLead(lead);
+    setYesStep("connected");
+  };
+
+  const handleAnotherNumberSubmit = async () => {
+    const trimmed = anotherNumber.replace(/\D/g, "").trim();
+    if (trimmed.length < 10) {
+      setAnotherNumberError("Enter valid 10-digit number");
+      return;
+    }
+    if (!numberUsage) {
+      setAnotherNumberError("Select how to use this number");
+      return;
+    }
+    setAnotherNumberError(null);
     setLoading(true);
+    const existingRaw = lead.number.replace(/\s*\([^)]*\)/g, "").trim().split(",")[0]?.trim() ?? lead.number.trim();
+    let newNumberValue: string;
+    if (numberUsage === "only_whatsapp" || numberUsage === "calling_and_whatsapp") {
+      newNumberValue = trimmed;
+    } else {
+      newNumberValue = `${trimmed} (Calling), ${existingRaw} (WhatsApp)`;
+    }
     const res = await fetch("/api/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, flow: "Connected", tags: "", category: "active" }),
+      body: JSON.stringify({
+        id,
+        flow: "Connected",
+        tags: "",
+        category: "active",
+        number: newNumberValue,
+        callbackTime: "",
+        whatsappFollowupStartedAt: "",
+      }),
     });
     setLoading(false);
     if (res.ok) {
+      const updated = {
+        ...lead,
+        flow: "Connected" as const,
+        tags: "" as const,
+        category: "active" as const,
+        number: newNumberValue,
+        callbackTime: "",
+        whatsappFollowupStartedAt: "",
+      };
+      setConnectedLead(updated);
+      setYesStep("connected");
+      onSuccess();
+    } else {
+      setAnotherNumberError("Failed to update");
+    }
+  };
+
+  const handleConnectedChoice = (choice: "Interested" | "Not Interested") => {
+    const toPass = connectedLead ?? lead;
+    if (choice === "Interested" && onConnectInterested) {
+      onConnectInterested(toPass);
+      onClose();
+    } else if (choice === "Not Interested" && onConnectNotInterested) {
+      onConnectNotInterested(toPass);
+      onClose();
+    } else {
       onSuccess();
       onClose();
     }
+  };
+
+  const scheduleFollowupAt = (callbackTime: string) => {
+    return fetch("/api/leads", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id,
+        tags: "Incoming Off",
+        category: "callback",
+        callbackTime,
+      }),
+    });
   };
 
   const handleNo = async () => {
@@ -76,20 +187,30 @@ export function WhatsAppFollowupModal({
     }
 
     const nextFollowup = new Date(now.getTime() + WHATSAPP_FOLLOWUP_HOURS * 60 * 60 * 1000);
-    const res = await fetch("/api/leads", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id,
-        tags: "Incoming Off",
-        category: "callback",
-        callbackTime: nextFollowup.toISOString(),
-      }),
-    });
+    const res = await scheduleFollowupAt(nextFollowup.toISOString());
     setLoading(false);
     if (res.ok) {
       onSuccess();
       onClose();
+    }
+  };
+
+  const handleCustomSchedule = async () => {
+    setCustomScheduleError(null);
+    const callbackTime = localDateTimeToISO(customDate, customTime, utcOffsetMinutes);
+    const callbackDate = new Date(callbackTime);
+    if (callbackDate.getTime() <= Date.now()) {
+      setCustomScheduleError("Pick a future date and time");
+      return;
+    }
+    setLoading(true);
+    const res = await scheduleFollowupAt(callbackTime);
+    setLoading(false);
+    if (res.ok) {
+      onSuccess();
+      onClose();
+    } else {
+      setCustomScheduleError("Failed to schedule");
     }
   };
 
@@ -103,16 +224,28 @@ export function WhatsAppFollowupModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-2 bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
+          {(selectedOption !== null || yesStep !== null) ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (yesStep === "choice") setYesStep(null);
+                else if (yesStep === "another_input") setYesStep("choice");
+                else if (yesStep === "connected") {
+                  setConnectedLead(null);
+                  setYesStep("choice");
+                } else if (selectedOption !== null) setSelectedOption(null);
+                else onClose();
+              }}
+              className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+              aria-label="Back"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-9 shrink-0" aria-hidden />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -121,7 +254,7 @@ export function WhatsAppFollowupModal({
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-white">WhatsApp Followup</h2>
-              <p className="truncate text-xs text-slate-300">{leadName} • {number}</p>
+              <p className="truncate text-xs text-slate-300">{lead.name} • {normalizeNumberForDisplay(lead.number)}</p>
             </div>
           </div>
           <button
@@ -136,14 +269,14 @@ export function WhatsAppFollowupModal({
           </button>
         </div>
 
-        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <p className="mb-4 text-sm text-neutral-600">
             Open WhatsApp and check for reply. Did reply come?
           </p>
 
           <button
             type="button"
-            onClick={() => openWhatsApp(getWaChatUrl(number))}
+            onClick={() => openWhatsApp(getWaChatUrl(lead.number))}
             className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-violet-500 bg-violet-50 px-4 py-3 font-medium text-violet-800"
           >
             <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
@@ -152,10 +285,14 @@ export function WhatsAppFollowupModal({
             Open WhatsApp
           </button>
 
-          <div className="mb-4 flex gap-3">
+          <div className="mb-4 flex gap-3" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              onClick={() => setSelectedOption(selectedOption === "yes" ? null : "yes")}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedOption((prev) => (prev === "yes" ? null : "yes"));
+              }}
               className={`flex-1 rounded-lg px-4 py-2.5 font-medium transition-colors ${
                 selectedOption === "yes"
                   ? "border-2 border-green-500 bg-green-100 text-green-800 ring-2 ring-green-500/30"
@@ -166,7 +303,11 @@ export function WhatsAppFollowupModal({
             </button>
             <button
               type="button"
-              onClick={() => setSelectedOption(selectedOption === "no" ? null : "no")}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedOption((prev) => (prev === "no" ? null : "no"));
+              }}
               className={`flex-1 rounded-lg px-4 py-2.5 font-medium transition-colors ${
                 selectedOption === "no"
                   ? "border-2 border-red-500 bg-red-100 text-red-800 ring-2 ring-red-500/30"
@@ -177,32 +318,170 @@ export function WhatsAppFollowupModal({
             </button>
           </div>
 
-          {selectedOption === "yes" ? (
-            <button
-              onClick={handleYes}
-              disabled={loading}
-              className="mb-2 w-full rounded-lg bg-green-600 px-4 py-2.5 font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              {loading ? "Saving..." : "Confirm - Mark Connected"}
-            </button>
+          {selectedOption === "yes" && yesStep === null ? (
+            <div className="mb-4 space-y-3 pt-2 border-t border-slate-200">
+              <p className="text-sm font-medium text-slate-700">Same number pe continue kare ya another?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleSameNumberContinue}
+                  disabled={loading}
+                  className="rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-50"
+                >
+                  {loading ? "..." : "Same number"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYesStep("another_input")}
+                  disabled={loading}
+                  className="rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-50"
+                >
+                  Another number
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {selectedOption === "yes" && yesStep === "another_input" ? (
+            <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+              <p className="text-sm font-medium text-slate-700">Enter the other number</p>
+              {anotherNumberError && <p className="text-xs text-red-600">{anotherNumberError}</p>}
+              <input
+                type="tel"
+                value={anotherNumber}
+                onChange={(e) => {
+                  setAnotherNumber(e.target.value);
+                  setAnotherNumberError(null);
+                }}
+                placeholder="e.g. 9876543210"
+                className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+              <div>
+                <p className="mb-2 text-xs font-medium text-slate-600">Use this number for</p>
+                <select
+                  value={numberUsage ?? ""}
+                  onChange={(e) => setNumberUsage((e.target.value || null) as NumberUsage | null)}
+                  className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                >
+                  <option value="">Select...</option>
+                  <option value="only_whatsapp">Only WhatsApp (replace existing)</option>
+                  <option value="calling">Calling (existing stays WhatsApp)</option>
+                  <option value="calling_and_whatsapp">Calling & WhatsApp both (replace)</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setYesStep("choice")}
+                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAnotherNumberSubmit}
+                  disabled={loading}
+                  className="flex-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {loading ? "Saving..." : "Save & continue"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {selectedOption === "yes" && yesStep === "connected" ? (
+            <div className="mb-4 space-y-3 pt-2 border-t border-slate-200">
+              <p className="mb-2 text-xs font-medium text-slate-700">Interested or Not Interested?</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleConnectedChoice("Interested")}
+                  className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                >
+                  Interested
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConnectedChoice("Not Interested")}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                >
+                  Not Interested
+                </button>
+              </div>
+            </div>
           ) : null}
           {selectedOption === "no" ? (
-            <button
-              onClick={handleNo}
-              disabled={loading}
-              className="mb-2 w-full rounded-lg bg-neutral-800 px-4 py-2.5 font-medium text-white hover:bg-neutral-900 disabled:opacity-50"
-            >
-              {loading ? "Saving..." : noButtonText}
-            </button>
+            <>
+              {daysPassed >= WHATSAPP_FOLLOWUP_MAX_DAYS ? (
+                <button
+                  onClick={handleNo}
+                  disabled={loading}
+                  className="mb-2 w-full rounded-lg bg-neutral-800 px-4 py-2.5 font-medium text-white hover:bg-neutral-900 disabled:opacity-50"
+                >
+                  {loading ? "Saving..." : noButtonText}
+                </button>
+              ) : showCustomSchedule ? (
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                  <p className="text-sm font-medium text-slate-700">Custom followup date & time</p>
+                  {customScheduleError && (
+                    <p className="text-xs text-red-600">{customScheduleError}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+                      <input
+                        type="date"
+                        value={customDate}
+                        onChange={(e) => setCustomDate(e.target.value)}
+                        min={today}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">Time</label>
+                      <input
+                        type="time"
+                        value={customTime}
+                        onChange={(e) => setCustomTime(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomSchedule(false)}
+                      className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleCustomSchedule}
+                      disabled={loading}
+                      className="flex-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {loading ? "Saving..." : "Schedule"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-2 flex flex-col gap-2">
+                  <button
+                    onClick={handleNo}
+                    disabled={loading}
+                    className="w-full rounded-lg bg-neutral-800 px-4 py-2.5 font-medium text-white hover:bg-neutral-900 disabled:opacity-50"
+                  >
+                    {loading ? "Saving..." : noButtonText}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomSchedule(true)}
+                    className="w-full rounded-lg border-2 border-violet-500 bg-violet-50 px-4 py-2.5 font-medium text-violet-800 hover:bg-violet-100"
+                  >
+                    Custom schedule
+                  </button>
+                </div>
+              )}
+            </>
           ) : null}
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-800 hover:bg-neutral-50"
-          >
-            Cancel
-          </button>
         </div>
       </div>
     </div>

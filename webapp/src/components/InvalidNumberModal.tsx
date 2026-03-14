@@ -8,6 +8,8 @@ interface InvalidNumberModalProps {
   leadNumber: string;
   id: string;
   onClose: () => void;
+  /** When provided, Back goes to previous modal (one step). When not provided, back button is hidden. */
+  onBack?: () => void;
   onConfirm: () => Promise<void>;
 }
 
@@ -15,6 +17,7 @@ export function InvalidNumberModal({
   leadName,
   leadNumber,
   onClose,
+  onBack,
   onConfirm,
 }: InvalidNumberModalProps) {
   const [loading, setLoading] = useState(false);
@@ -47,16 +50,20 @@ export function InvalidNumberModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex items-center gap-2 bg-gradient-to-br from-slate-700 to-slate-800 px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="shrink-0 rounded p-1.5 text-white/90 hover:bg-white/20 transition-colors"
+              aria-label="Back"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-9 shrink-0" aria-hidden />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,24 +97,14 @@ export function InvalidNumberModal({
             Marking as invalid will remove this lead from your list and move it to Admin view for review.
           </p>
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={loading}
-              className="flex-1 rounded-lg bg-slate-700 px-4 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {loading ? "Moving..." : MARK_INVALID_LABEL}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={loading}
+            className="w-full rounded-lg bg-slate-700 px-4 py-2.5 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loading ? "Moving..." : MARK_INVALID_LABEL}
+          </button>
         </div>
       </div>
     </div>

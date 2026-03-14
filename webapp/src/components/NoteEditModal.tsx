@@ -82,7 +82,7 @@ export function NoteEditModal({ lead, onClose, onSuccess }: NoteEditModalProps) 
             onChange={(e) => setManualNote(e.target.value)}
             disabled={!isEditing}
             className="w-full min-h-[120px] rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:bg-slate-50 disabled:text-slate-600 disabled:cursor-not-allowed"
-            placeholder="Add or edit note (Tag history and action notes are kept separately)…"
+            placeholder="Type your note here…"
             autoFocus={isEditing}
           />
           {error && (

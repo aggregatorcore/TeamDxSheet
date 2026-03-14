@@ -16,7 +16,6 @@ export const TAG_COLORS: Record<TagOption | "overdue", string> = {
   "WhatsApp Flow Active": `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
   "Not Interested": `bg-slate-500 text-white border border-slate-600 ${badgeBase}`,
   Interested: `bg-emerald-500 text-white border border-emerald-600 ${badgeBase}`,
-  "Document received": `bg-teal-500 text-white border border-teal-600 ${badgeBase}`,
   overdue: `bg-red-600 text-white border border-red-700 ${badgeBase}`,
 };
 
@@ -26,27 +25,27 @@ export const FLOW_TEXT_COLORS: Record<FlowOption, string> = {
   "Not Connected": "text-red-600",
 };
 
-/** Text-only colors for Tag in table (no button/badge style) */
+/** Tag pill style in table: bold text only, no background/border. Use with rounded-full px-2 py-0.5 text-[11px] font-bold. */
 export const TAG_TEXT_COLORS: Record<TagOption | "overdue", string> = {
-  "No Answer": "text-blue-600",
-  "Switch Off": "text-amber-700",
-  "Busy IVR": "text-orange-600",
-  "Incoming Off": "text-sky-600",
-  "Invalid Number": "text-red-600",
-  "WhatsApp Flow Active": "text-emerald-700",
-  "Not Interested": "text-slate-600",
-  Interested: "text-emerald-600",
-  "Document received": "text-teal-600",
-  overdue: "text-red-600",
+  "No Answer": "text-blue-900",
+  "Switch Off": "text-amber-900",
+  "Busy IVR": "text-orange-800",
+  "Incoming Off": "text-sky-800",
+  "Invalid Number": "text-red-800",
+  "WhatsApp Flow Active": "text-emerald-800",
+  "Not Interested": "text-slate-800",
+  Interested: "text-emerald-800",
+  overdue: "text-red-800",
 };
 
-/** Sub-tag display colors (under WhatsApp Flow Active). Not in TAG_OPTIONS. */
-export const SUBTAG_TEXT_COLORS: Record<string, string> = {
-  "WhatsApp No Reply": "text-violet-600",
-  "WhatsApp Not Available": "text-purple-600",
+/** Sub-flow pill style (WhatsApp Flow Active + Interested sub-flows). Document received is Interested sub-flow, not tag. */
+export const SUBFLOW_TEXT_COLORS: Record<string, string> = {
+  "WhatsApp No Reply": "text-violet-800",
+  "WhatsApp Not Available": "text-purple-800",
+  "Document received": "text-teal-800",
 };
 
-/** Global: display labels for user actions. Use everywhere for Callback, Followup, Try WhatsApp, Move buckets. */
+/** Global: display labels for user actions. Use everywhere for Callback, Followup, Try WhatsApp, Move buckets, Overdue. */
 export const ACTION_LABELS: Record<ActionType, string> = {
   callback: "Callback",
   followup: "Followup",
@@ -54,6 +53,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   move_green: "Move to Green",
   move_exhaust: "Move to Exhaust",
   try_whatsapp: "Try WhatsApp",
+  overdue: "Overdue",
 };
 
 /** Global: sub-labels for callback action (Call Now, Schedule callback) and move_exhaust (Mark Invalid). */
@@ -201,8 +201,8 @@ export const ACTION_NOTE_PREFIX = "Action: ";
 /** Prefix for user-written manual note in lead.note. Only this part is editable in NoteEditModal. */
 export const MANUAL_NOTE_PREFIX = "Manual: ";
 
-/** Prefix for WhatsApp Flow Active sub-tag in lead.note (SubTag: WhatsApp No Reply). */
-export const SUBTAG_NOTE_PREFIX = "SubTag: ";
+/** Prefix for WhatsApp Flow Active sub-flow in lead.note (SubFlow: WhatsApp No Reply). Legacy notes may use "SubTag: ". */
+export const SUBFLOW_NOTE_PREFIX = "SubFlow: ";
 
 /** Action that gets default 1hr followup countdown when selected */
 export const INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR = "Asked client to share documents";

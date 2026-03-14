@@ -1,7 +1,7 @@
 /** Global: only 2 flows – Connected, Not Connected. No "Select". */
 export type FlowOption = "Connected" | "Not Connected";
 
-/** Global: all tags – single source of truth. Use TAG_OPTIONS / TAGS_FOR_* everywhere. */
+/** Global: all tags – single source of truth. Document received is NOT a tag; it is sub-flow of Interested. */
 export type TagOption =
   | "No Answer"
   | "Switch Off"
@@ -10,11 +10,10 @@ export type TagOption =
   | "Invalid Number"
   | "WhatsApp Flow Active"
   | "Not Interested"
-  | "Interested"
-  | "Document received";
+  | "Interested";
 
-/** Sub-tags under WhatsApp Flow Active only (not in TAG_OPTIONS). */
-export type WhatsAppSubTag = "WhatsApp Not Available" | "WhatsApp No Reply";
+/** Sub-flows under WhatsApp Flow Active only (not in TAG_OPTIONS). */
+export type WhatsAppSubFlow = "WhatsApp Not Available" | "WhatsApp No Reply";
 
 export type LeadCategory = "active" | "callback" | "overdue";
 
@@ -22,6 +21,8 @@ export interface Lead {
   id: string;
   rowIndex?: number;
   source: string;
+  /** Optional token; shown in Token column when present. */
+  token?: string;
   name: string;
   place: string;
   number: string;
@@ -47,11 +48,10 @@ export const TAG_OPTIONS: TagOption[] = [
   "WhatsApp Flow Active",
   "Not Interested",
   "Interested",
-  "Document received",
 ];
 
-/** Sub-tags under tag "WhatsApp Flow Active". Not standalone tags. */
-export const WHATSAPP_SUB_TAGS: WhatsAppSubTag[] = ["WhatsApp Not Available", "WhatsApp No Reply"];
+/** Sub-flows under tag "WhatsApp Flow Active". Not standalone tags. */
+export const WHATSAPP_SUB_FLOWS: WhatsAppSubFlow[] = ["WhatsApp Not Available", "WhatsApp No Reply"];
 
 export const TAGS_FOR_NOT_CONNECTED: TagOption[] = [
   "No Answer",
@@ -61,12 +61,12 @@ export const TAGS_FOR_NOT_CONNECTED: TagOption[] = [
   "Invalid Number",
 ];
 
-export const TAGS_FOR_CONNECTED: TagOption[] = ["Not Interested", "Interested", "Document received"];
+export const TAGS_FOR_CONNECTED: TagOption[] = ["Not Interested", "Interested"];
 
 /** Tags that allow scheduling a callback (No Answer cycle – Not Connected sub-set). Global: use for schedule step. */
 export const TAGS_SCHEDULEABLE_CALLBACK: TagOption[] = ["No Answer", "Switch Off", "Busy IVR"];
 
-/** When lead has tag "WhatsApp Flow Active", sub-tag stored in note (SubTag: WhatsApp No Reply) or legacy tags "Incoming Off" + whatsappFollowupStartedAt. */
+/** When lead has tag "WhatsApp Flow Active", sub-flow stored in note (SubFlow: WhatsApp No Reply) or legacy tags "Incoming Off" + whatsappFollowupStartedAt. */
 export const WHATSAPP_FOLLOWUP_TAG_DISPLAY = "WhatsApp No Reply";
 
 export const NOT_INTERESTED_REASONS = [
@@ -79,14 +79,15 @@ export const NOT_INTERESTED_REASONS = [
 
 export const NOT_INTERESTED_OTHER_MIN_CHARS = 50;
 
-/** Global: user actions (what user can do) – Callback, Followup, Move buckets, Try WhatsApp. Single source of truth. */
+/** Global: user actions (what user can do) – Callback, Followup, Move buckets, Try WhatsApp, Overdue. Single source of truth. */
 export type ActionType =
   | "callback"
   | "followup"
   | "move_review"
   | "move_green"
   | "move_exhaust"
-  | "try_whatsapp";
+  | "try_whatsapp"
+  | "overdue";
 
 export const ACTIONS: ActionType[] = [
   "callback",
@@ -95,4 +96,5 @@ export const ACTIONS: ActionType[] = [
   "move_green",
   "move_exhaust",
   "try_whatsapp",
+  "overdue",
 ];

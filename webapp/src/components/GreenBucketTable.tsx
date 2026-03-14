@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
+import { getDisplayId } from "@/lib/displayId";
 import type { Lead } from "@/types/lead";
 
 interface GreenBucketTableProps {
@@ -66,7 +67,7 @@ export function GreenBucketTable({ leads, onRefresh }: GreenBucketTableProps) {
               >
                 <td className="overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-emerald-200 px-2 py-1.5 text-xs font-mono text-slate-900 transition-colors duration-150 bg-emerald-50/30 group-hover:bg-emerald-50/50">
                   <div className="flex items-center gap-1">
-                    <span>{lead.id.slice(0, 8)}</span>
+                    <span>{getDisplayId(lead.id)}</span>
                     <button
                       type="button"
                       onClick={() => setDetailLead(lead)}
