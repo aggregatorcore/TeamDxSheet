@@ -71,7 +71,7 @@ export function WorkTable({ leads, onRefresh, onLeadUpdate }: WorkTableProps) {
           <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2">
               <span className="text-xs font-medium text-slate-500">Token</span>
-              <span className="ml-2 font-mono text-sm font-semibold text-slate-800">{tokenDisplayText || focusLead.token ?? "—"}</span>
+              <span className="ml-2 font-mono text-sm font-semibold text-slate-800">{(tokenDisplayText || focusLead.token) ?? "—"}</span>
             </div>
             <div className="space-y-3 p-4">
               <div>
