@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatTimeTo12h, formatWeekOffDisplay, WEEK_DAYS } from "@/lib/shiftUtils";
@@ -35,7 +35,7 @@ export default function ShiftsPage() {
   const [backfillTagsLoading, setBackfillTagsLoading] = useState(false);
   const [backfillTagsResult, setBackfillTagsResult] = useState<{ updated: number; totalWithCallback: number } | null>(null);
 
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     const res = await fetch("/api/admin/shifts");
     if (res.status === 403) {
       router.push("/dashboard");
@@ -45,7 +45,7 @@ export default function ShiftsPage() {
       const data = await res.json();
       setUsers(Array.isArray(data) ? data : []);
     }
-  };
+  }, [router]);
 
   useEffect(() => {
     const init = async () => {
@@ -66,8 +66,7 @@ export default function ShiftsPage() {
       setLoading(false);
     };
     init();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchShifts stable, run once on mount
-  }, [router]);
+  }, [router, fetchShifts]);
 
   const handleSaveShift = async () => {
     if (!editing) return;
@@ -104,8 +103,7 @@ export default function ShiftsPage() {
       setEditStartTime(timeToInput(editing.shift_start_time));
       setEditEndTime(timeToInput(editing.shift_end_time));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sync form when editing user changes (by id)
-  }, [editing?.id]);
+  }, [editing]);
 
   const toggleWeekDay = (dayValue: string) => {
     if (!editing) return;
