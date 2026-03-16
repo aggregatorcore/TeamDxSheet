@@ -117,7 +117,7 @@ function nextWorkingDay(
   leaveDates: string[],
   offsetMin: number
 ): string {
-  let d = new Date(dateStr + "T12:00:00Z");
+  const d = new Date(dateStr + "T12:00:00Z");
   if (!Number.isFinite(d.getTime())) return dateStr;
   for (let i = 0; i < 366; i++) {
     const y = d.getUTCFullYear();

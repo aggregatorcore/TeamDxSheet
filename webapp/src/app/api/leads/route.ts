@@ -7,7 +7,6 @@ import {
   getLeadsForUser,
   getLeadsForUserAsAdmin,
   getLeadsForUserAsAdminByBucket,
-  getLeadByAssignedAndNumber,
   getLeadByNumber,
   updateLead,
   markLeadInvalid,

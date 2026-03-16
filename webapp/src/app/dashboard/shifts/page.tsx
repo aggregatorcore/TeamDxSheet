@@ -66,6 +66,7 @@ export default function ShiftsPage() {
       setLoading(false);
     };
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchShifts stable, run once on mount
   }, [router]);
 
   const handleSaveShift = async () => {
@@ -103,6 +104,7 @@ export default function ShiftsPage() {
       setEditStartTime(timeToInput(editing.shift_start_time));
       setEditEndTime(timeToInput(editing.shift_end_time));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sync form when editing user changes (by id)
   }, [editing?.id]);
 
   const toggleWeekDay = (dayValue: string) => {
