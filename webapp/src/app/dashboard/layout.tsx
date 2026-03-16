@@ -25,23 +25,31 @@ export default async function DashboardLayout({
     redirect("/");
   }
 
-  let profile: { role?: string; full_name?: string | null } | null = null;
+  type ProfileRow = {
+    role?: string;
+    full_name?: string | null;
+    shift_start_time?: string | null;
+    shift_end_time?: string | null;
+    week_off_days?: string | null;
+  };
+  const profileSelect = "role, full_name, shift_start_time, shift_end_time, week_off_days";
+  let profile: ProfileRow | null = null;
   const adminClient = tryCreateAdminClient();
   if (adminClient) {
     const { data } = await adminClient
       .from("profiles")
-      .select("role, full_name")
+      .select(profileSelect)
       .eq("id", user.id)
       .single();
-    profile = data;
+    profile = data as ProfileRow | null;
   }
   if (!profile) {
     const { data } = await supabase
       .from("profiles")
-      .select("role, full_name")
+      .select(profileSelect)
       .eq("id", user.id)
       .single();
-    profile = data;
+    profile = data as ProfileRow | null;
   }
   const roleFromProfile = profile?.role?.toLowerCase();
   const roleFromMeta =
@@ -52,11 +60,21 @@ export default async function DashboardLayout({
     roleFromMeta === "admin" ||
     isAdminEmail(user.email ?? undefined);
 
+  const initialShift =
+    profile && (profile.shift_start_time != null || profile.shift_end_time != null || profile.week_off_days != null)
+      ? {
+          shift_start_time: profile.shift_start_time ?? null,
+          shift_end_time: profile.shift_end_time ?? null,
+          week_off_days: profile.week_off_days ?? null,
+        }
+      : null;
+
   return (
     <DashboardShell
       isAdmin={isAdmin}
       userEmail={user.email ?? undefined}
       userName={profile?.full_name ?? undefined}
+      initialShift={initialShift}
     >
       {children}
     </DashboardShell>

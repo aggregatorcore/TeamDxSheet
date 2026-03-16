@@ -25,12 +25,14 @@ interface DashboardShellProps {
   isAdmin: boolean;
   userEmail?: string;
   userName?: string | null;
+  /** Shift from server (layout) so "My shift" shows on first paint without client fetch. */
+  initialShift?: { shift_start_time: string | null; shift_end_time: string | null; week_off_days: string | null } | null;
 }
 
-export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, userName }: DashboardShellProps) {
+export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, userName, initialShift }: DashboardShellProps) {
   const adminByEmail = useMemo(() => isAdminByEmail(userEmail), [userEmail]);
   const [isAdmin, setIsAdmin] = useState(initialAdmin || adminByEmail);
-  const [shift, setShift] = useState<{ shift_start_time: string | null; shift_end_time: string | null; week_off_days: string | null } | null>(null);
+  const [shift, setShift] = useState<{ shift_start_time: string | null; shift_end_time: string | null; week_off_days: string | null } | null>(initialShift ?? null);
 
   useEffect(() => {
     if (adminByEmail) {
