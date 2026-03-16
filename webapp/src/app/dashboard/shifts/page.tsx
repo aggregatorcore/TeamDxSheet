@@ -34,6 +34,11 @@ export default function ShiftsPage() {
   const [fixCallbackResult, setFixCallbackResult] = useState<{ fixed: number; tokensUpdated: number; totalWithCallback: number } | null>(null);
   const [backfillTagsLoading, setBackfillTagsLoading] = useState(false);
   const [backfillTagsResult, setBackfillTagsResult] = useState<{ updated: number; totalWithCallback: number } | null>(null);
+  const [testUserEmail, setTestUserEmail] = useState("");
+  const [setTestSourceLoading, setSetTestSourceLoading] = useState(false);
+  const [setTestSourceResult, setSetTestSourceResult] = useState<{ updated: number; userEmail: string } | null>(null);
+  const [freshTestLeadsLoading, setFreshTestLeadsLoading] = useState(false);
+  const [freshTestLeadsResult, setFreshTestLeadsResult] = useState<{ updated: number } | null>(null);
 
   const fetchShifts = useCallback(async () => {
     const res = await fetch("/api/admin/shifts");
@@ -208,6 +213,43 @@ export default function ShiftsPage() {
     }
   };
 
+  const handleSetTestUserLeadsSource = async () => {
+    const email = testUserEmail.trim();
+    if (!email) {
+      setError("Enter test user email");
+      return;
+    }
+    setSetTestSourceLoading(true);
+    setSetTestSourceResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/set-test-user-leads-source", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userEmail: email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setSetTestSourceResult({ updated: data.updated ?? 0, userEmail: data.userEmail ?? email });
+      else setError(data?.error ?? "Failed");
+    } finally {
+      setSetTestSourceLoading(false);
+    }
+  };
+
+  const handleFreshTestLeads = async () => {
+    setFreshTestLeadsLoading(true);
+    setFreshTestLeadsResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/fresh-test-leads", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setFreshTestLeadsResult({ updated: data.updated ?? 0 });
+      else setError(data?.error ?? "Failed");
+    } finally {
+      setFreshTestLeadsLoading(false);
+    }
+  };
+
   const timeToInput = (t: string | null | undefined): string => {
     if (!t) return "";
     const part = String(t).trim().slice(0, 5);
@@ -296,6 +338,51 @@ export default function ShiftsPage() {
           {backfillTagsResult && (
             <p className="mt-2 text-xs text-neutral-600">
               Updated {backfillTagsResult.updated} of {backfillTagsResult.totalWithCallback} leads with callback time.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-neutral-200 bg-neutral-50/80 p-4">
+          <p className="mb-2 text-sm font-medium text-neutral-700">Set test user leads source to &quot;testing&quot;</p>
+          <p className="mb-3 text-xs text-neutral-600">Us user ki saari leads (exhaust, review, green, kisi bhi bucket) ka source = &quot;testing&quot; set karega.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={testUserEmail}
+              onChange={(e) => setTestUserEmail(e.target.value)}
+              placeholder="Test user email (e.g. telecaller@teamdx.com)"
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm min-w-[220px]"
+            />
+            <button
+              type="button"
+              onClick={handleSetTestUserLeadsSource}
+              disabled={setTestSourceLoading}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            >
+              {setTestSourceLoading ? "Running…" : "Set source = testing"}
+            </button>
+          </div>
+          {setTestSourceResult && (
+            <p className="mt-2 text-xs text-neutral-600">
+              Updated {setTestSourceResult.updated} leads for {setTestSourceResult.userEmail}.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-neutral-200 bg-neutral-50/80 p-4">
+          <p className="mb-2 text-sm font-medium text-neutral-700">Fresh test leads</p>
+          <p className="mb-3 text-xs text-neutral-600">Saari leads jinka source = &quot;testing&quot; hai unko fresh state mein reset karega (flow Not Connected, tags/callback/note/review/green/new_assigned clear).</p>
+          <button
+            type="button"
+            onClick={handleFreshTestLeads}
+            disabled={freshTestLeadsLoading}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            {freshTestLeadsLoading ? "Running…" : "Fresh all test leads"}
+          </button>
+          {freshTestLeadsResult && (
+            <p className="mt-2 text-xs text-neutral-600">
+              Reset {freshTestLeadsResult.updated} test leads to fresh.
             </p>
           )}
         </div>

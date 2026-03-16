@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LeadTable } from "@/components/LeadTable";
@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     const res = await fetch("/api/leads");
     if (res.status === 401) {
       router.push("/");
@@ -36,7 +36,13 @@ export default function DashboardPage() {
     }
     const data = await res.json();
     setLeads(Array.isArray(data) ? data : []);
-  };
+  }, [router]);
+
+  /** Sync tokens (backfill for current user) then fetch leads. Used after tag apply and when Refresh is clicked. */
+  const refreshWithSync = useCallback(async () => {
+    await fetch("/api/sync-my-tokens", { method: "POST" });
+    await fetchLeads();
+  }, [fetchLeads]);
 
   const fetchGreenLeads = async () => {
     const res = await fetch("/api/leads?green=true");
@@ -84,6 +90,14 @@ export default function DashboardPage() {
     const v = searchParams.get("view") as ViewMode | null;
     setView((v === "work" || v === "waitingList" || v === "green" || v === "exhaust" || v === "review" || v === "newAssigned" || v === "live" || v === "leads") ? v : "work");
   }, [searchParams]);
+
+  useEffect(() => {
+    const handler = () => {
+      refreshWithSync();
+    };
+    window.addEventListener("dashboard-refresh", handler);
+    return () => window.removeEventListener("dashboard-refresh", handler);
+  }, [refreshWithSync]);
 
   useEffect(() => {
     const init = async () => {
@@ -218,13 +232,13 @@ export default function DashboardPage() {
         {view === "work" ? (
           <WorkTable
             leads={leads}
-            onRefresh={fetchLeads}
+            onRefresh={refreshWithSync}
             onLeadUpdate={(id, updates) => {
               setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
             }}
           />
         ) : view === "waitingList" ? (
-          <WaitingListTable leads={leads} onRefresh={fetchLeads} />
+          <WaitingListTable leads={leads} onRefresh={refreshWithSync} />
         ) : view === "leads" ? (
           leads.length === 0 ? (
             <p className="flex flex-1 items-center justify-center p-8 text-center text-neutral-600">
@@ -233,7 +247,7 @@ export default function DashboardPage() {
           ) : (
             <LeadTable
               leads={filteredLeads}
-              onRefresh={fetchLeads}
+              onRefresh={refreshWithSync}
               onLeadUpdate={(id, updates) => {
                 setLeads((prev) =>
                   prev.map((l) => (l.id === id ? { ...l, ...updates } : l))

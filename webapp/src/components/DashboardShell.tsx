@@ -134,9 +134,12 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
             )}
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("dashboard-refresh"));
+                router.refresh();
+              }}
               className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 hover:border-neutral-300 sm:gap-2 sm:px-3"
-              title="Reload page"
+              title="Sync tokens and reload leads"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

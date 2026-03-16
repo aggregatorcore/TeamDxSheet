@@ -287,7 +287,8 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     const flowNorm = String(lead.flow ?? "").trim().toLowerCase();
     const scheduleableTag = lead.tags !== "" && TAGS_SCHEDULEABLE_CALLBACK.includes(lead.tags as TagOption);
     const incompleteNotConnected = (flowNorm === "not connected" || flowNorm === "select") && scheduleableTag && !lead.callbackTime;
-    const isFresh = (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select")) || incompleteNotConnected;
+    // Not Connected + no tag = fresh (dial modal); include "not connected" so Dial opens, not Detail
+    const isFresh = (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select" || flowNorm === "not connected")) || incompleteNotConnected;
     const isIncomingOffClickable = lead.flow === "Not Connected" && effectiveTag === "Incoming Off";
     if (isOverdue(lead)) {
       if (getCallbackFlowType(lead) === "whatsapp_followup") setFollowupLead(lead);
@@ -303,6 +304,9 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     else if (isIncomingOffClickable) {
       setWhatsappOpenedFromCallDialIncomingOff(false);
       setWhatsappLead(lead);
+    } else {
+      // Fallback: open lead detail so click on row always opens at least one modal
+      setDetailLead(lead);
     }
   }, []);
 
@@ -480,9 +484,9 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             const tagsNorm = String(lead.tags ?? "").trim();
             const scheduleableTag = lead.tags !== "" && TAGS_SCHEDULEABLE_CALLBACK.includes(lead.tags as TagOption);
             const incompleteNotConnected = (flowNorm === "not connected" || flowNorm === "select") && scheduleableTag && !lead.callbackTime;
-            // Fresh = no tag yet (incl. legacy "Select"), or incomplete Not Connected → row click opens dial modal
+            // Fresh = no tag yet (incl. Not Connected), or incomplete Not Connected → row click opens dial modal
             const isFresh =
-              (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select")) ||
+              (tagsNorm === "" && (flowNorm === "" || flowNorm === "connected" || flowNorm === "select" || flowNorm === "not connected")) ||
               incompleteNotConnected;
             const effectiveTag = getEffectiveTag(lead.note, lead.tags);
             const displayTag = isWhatsAppFollowupLead(lead)
@@ -603,7 +607,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                   lead.number
                 )}
               </td>
-              <td className={`overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 5 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId && !(e.target as HTMLElement).closest("[data-collaboration-block]")) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 5 }); if (isRowClickable && !(e.target as HTMLElement).closest("button")) openRowModal(lead); }}>
+              <td className={`overflow-hidden border-r-2 border-slate-200 px-2 py-1.5 align-middle ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 5 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId && !(e.target as HTMLElement).closest("[data-collaboration-block]")) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 5 }); if (!(e.target as HTMLElement).closest("button")) openRowModal(lead); }}>
                 {/* Single line: tag, action note, badges, buttons, countdown */}
                 <div className="flex min-w-0 flex-wrap items-center gap-2" onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId && !(e.target as HTMLElement).closest("[data-collaboration-block]")) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 5 }); if (!(e.target as HTMLElement).closest("button")) openRowModal(lead); }}>
                   {(!isFresh || lead.callbackTime) && !(lead.callbackTime && lead.tags !== "Interested" && !isWhatsAppFollowupLead(lead)) && (
