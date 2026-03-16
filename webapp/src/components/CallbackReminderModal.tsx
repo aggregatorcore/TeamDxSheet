@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import type { Lead, TagOption } from "@/types/lead";
-import { TAGS_FOR_NOT_CONNECTED } from "@/types/lead";
-import { appendTagHistory, getNextAttempt } from "@/lib/leadNote";
+import { TAGS_FOR_NOT_CONNECTED, TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
+import { appendTagHistory, getAutoScheduleHoursForAttempt, getNextAttempt, canScheduleMoreHolds } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
-import { ACTION_NOTE_PREFIX, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, FLOW_DISPLAY_LABELS, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
+import { FlowIcon } from "./TagIcons";
 import { useCountdown } from "@/hooks/useCountdown";
 
 const QUICK_PRESETS = [
@@ -45,6 +46,8 @@ export interface CallbackReminderModalProps {
   onConnectInterested?: (lead: Lead) => void;
   onConnectNotInterested?: (lead: Lead) => void;
   onInvalidNumber?: (lead: Lead) => void;
+  /** When lead is moved to New Assigned (hold limit); parent shows animation and refreshes after. If provided, onSuccess is not called so refresh happens after animation. */
+  onMoveToNewAssigned?: (lead: Lead) => void;
 }
 
 type Step = "reminder" | "callNow" | "result" | "connected" | "not_connect" | "schedule";
@@ -57,6 +60,7 @@ export function CallbackReminderModal({
   onConnectInterested,
   onConnectNotInterested,
   onInvalidNumber,
+  onMoveToNewAssigned,
 }: CallbackReminderModalProps) {
   const countdown = useCountdown(lead.callbackTime || null);
   const [step, setStep] = useState<Step>(
@@ -102,21 +106,34 @@ export function CallbackReminderModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const handleConnect = async () => {
-    setLoading(true);
+  // Auto-schedule default: No Answer, Switch Off, Busy IVR – attempt 1 = 2h, 2 = 8h, 3 = 12h (shift logic applied on save)
+  useEffect(() => {
+    if (step !== "schedule" || !tag) return;
+    if (!TAGS_SCHEDULEABLE_CALLBACK.includes(tag)) return;
+    const attempt = getNextAttempt(lead.note, tag);
+    const hours = getAutoScheduleHoursForAttempt(attempt);
+    if (hours != null) {
+      const d = new Date(Date.now() + hours * 60 * 60 * 1000);
+      setDate(formatDateForInput(d));
+      setTime(formatTimeForInput(d));
+    }
+  }, [step, tag, lead.note]);
+
+  const handleConnect = () => {
     setError(null);
-    const res = await fetch("/api/leads", {
+    setStep("connected");
+    fetch("/api/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: lead.id, flow: "Connected", tags: "" }),
+    }).then((res) => {
+      if (!res.ok) {
+        res.json().catch(() => ({})).then((data) => {
+          setError(data?.error || "Failed");
+          setStep("result");
+        });
+      }
     });
-    setLoading(false);
-    if (res.ok) {
-      setStep("connected");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error || "Failed");
-    }
   };
 
   const handleConnectedChoice = (choice: "Interested" | "Not Interested") => {
@@ -129,6 +146,86 @@ export function CallbackReminderModal({
     } else {
       onClose();
     }
+  };
+
+  const handleNotConnectTagClick = async (t: TagOption) => {
+    if (t === "Invalid Number") {
+      if (onInvalidNumber) {
+        onInvalidNumber(lead);
+        onClose();
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      const noteWithHistory = appendTagHistory(lead.note, t);
+      fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: lead.id,
+          flow: "Not Connected",
+          tags: t,
+          note: noteWithHistory,
+          category: "active",
+        }),
+      })
+        .then((res) => {
+          setLoading(false);
+          if (res.ok) {
+            onSuccess();
+            onClose();
+          } else {
+            res.json().catch(() => ({})).then((data) => setError(data.error || "Failed"));
+          }
+        })
+        .catch(() => setLoading(false));
+      return;
+    }
+    if (TAGS_SCHEDULEABLE_CALLBACK.includes(t) && canScheduleMoreHolds(lead.note, t)) {
+      const attempt = getNextAttempt(lead.note, t);
+      const hours = getAutoScheduleHoursForAttempt(attempt);
+      if (hours != null) {
+        setLoading(true);
+        setError(null);
+        // Proposed time (e.g. now+2h); API applies shift then token, then save
+        const callbackTime = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+        const attemptNote = `Attempt ${attempt}: ${t}`;
+        const noteWithTagHistory = appendTagHistory(lead.note, t);
+        const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+        const callbackDateStr = new Date(callbackTime).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+        const actionNote = `${ACTION_NOTE_PREFIX}Callback scheduled for ${callbackDateStr}`;
+        const newNote = noteWithAttempt ? `${noteWithAttempt} | ${actionNote}` : actionNote;
+        try {
+          const res = await fetch("/api/leads", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: lead.id,
+              flow: "Not Connected",
+              tags: t,
+              note: newNote,
+              callbackTime,
+              category: "callback",
+            }),
+          });
+          setLoading(false);
+          if (res.ok) {
+            onSuccess();
+            onClose();
+          } else {
+            const data = await res.json().catch(() => ({}));
+            setError(data.error || "Failed");
+          }
+        } catch {
+          setLoading(false);
+          setError("Failed");
+        }
+        return;
+      }
+    }
+    setTag(t);
+    setError(null);
+    setStep("schedule");
   };
 
   const handleSchedule = async () => {
@@ -163,6 +260,35 @@ export function CallbackReminderModal({
     if (res.ok) {
       onSuccess();
       onClose();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed");
+    }
+  };
+
+  const handleMoveToNewAssigned = async () => {
+    setLoading(true);
+    setError(null);
+    const noteSuffix = "Max hold attempts reached – moved to New Assigned";
+    const baseNote = lead.note?.trim() ? `${lead.note} | ${ACTION_NOTE_PREFIX}${noteSuffix}` : `${ACTION_NOTE_PREFIX}${noteSuffix}`;
+    const res = await fetch("/api/leads", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: lead.id,
+        note: baseNote,
+        moveToNewAssigned: true,
+      }),
+    });
+    setLoading(false);
+    if (res.ok) {
+      if (onMoveToNewAssigned) {
+        onMoveToNewAssigned(lead);
+        onClose();
+      } else {
+        onSuccess();
+        onClose();
+      }
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Failed");
@@ -284,16 +410,22 @@ export function CallbackReminderModal({
                   type="button"
                   onClick={handleConnect}
                   disabled={loading}
-                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {loading ? "..." : "Connected"}
+                  {loading ? "..." : (
+                    <>
+                      <FlowIcon flow="Connected" className="h-5 w-5 shrink-0" />
+                      {FLOW_DISPLAY_LABELS.Connected}
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep("not_connect")}
-                  className="flex-1 rounded-lg border border-amber-400 bg-amber-50 px-4 py-2.5 font-medium text-amber-900 hover:bg-amber-100"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-2.5 font-medium text-amber-900 hover:bg-amber-100"
                 >
-                  Not connected
+                  <FlowIcon flow="Not Connected" className="h-5 w-5 shrink-0" />
+                  {FLOW_DISPLAY_LABELS["Not Connected"]}
                 </button>
               </div>
               {error && (
@@ -328,51 +460,15 @@ export function CallbackReminderModal({
             <>
               <p className="mb-3 text-sm font-medium text-neutral-700">Why didn&apos;t it connect?</p>
               <div className="mb-4 flex flex-wrap gap-2">
-                {TAGS_FOR_NOT_CONNECTED.map((t) => (
+                {TAGS_FOR_NOT_CONNECTED.map((tagOption) => (
                   <button
-                    key={t}
+                    key={tagOption}
                     type="button"
                     disabled={loading}
-                    onClick={() => {
-                      setTag(t);
-                      if (t === "Invalid Number") {
-                        if (onInvalidNumber) {
-                          onInvalidNumber(lead);
-                          onClose();
-                          return;
-                        }
-                        setLoading(true);
-                        setError(null);
-                        const noteWithHistory = appendTagHistory(lead.note, t);
-                        fetch("/api/leads", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            id: lead.id,
-                            flow: "Not Connected",
-                            tags: t,
-                            note: noteWithHistory,
-                            category: "active",
-                          }),
-                        })
-                          .then((res) => {
-                            setLoading(false);
-                            if (res.ok) {
-                              onSuccess();
-                              onClose();
-                            } else {
-                              res.json().catch(() => ({})).then((data) => setError(data.error || "Failed"));
-                            }
-                          })
-                          .catch(() => setLoading(false));
-                        return;
-                      }
-                      setError(null);
-                      setStep("schedule");
-                    }}
+                    onClick={() => handleNotConnectTagClick(tagOption)}
                     className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
                   >
-                    {t}
+                    {tagOption}
                   </button>
                 ))}
               </div>
@@ -393,62 +489,92 @@ export function CallbackReminderModal({
 
           {step === "schedule" && (
             <>
-              <p className="mb-2 text-sm font-medium text-neutral-700">
-                {SCHEDULE_CALLBACK_LABEL} <span className="text-amber-700">({tag})</span>
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {QUICK_PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => (p.custom ? applyPreset(undefined, p.custom) : applyPreset(p.mins))}
-                    className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mb-4 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-neutral-600">Date</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    min={today}
-                    className="w-full rounded-lg border border-neutral-300 px-2 py-1.5 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-neutral-600">Time</label>
-                  <input
-                    type="time"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    className="w-full rounded-lg border border-neutral-300 px-2 py-1.5 text-sm"
-                  />
-                </div>
-              </div>
-              {error && (
-                <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+              {!canScheduleMoreHolds(lead.note, tag ?? "") ? (
+                <>
+                  <p className="mb-2 text-sm font-medium text-neutral-700">
+                    Max holds reached for <span className="text-amber-700">{tag}</span> (3 attempts). Schedule is not allowed. Send this lead to New Assigned for admin.
+                  </p>
+                  {error && (
+                    <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStep("not_connect")}
+                      className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMoveToNewAssigned}
+                      disabled={loading}
+                      className="flex-1 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {loading ? "Moving..." : "Move to New Assigned"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mb-2 text-sm font-medium text-neutral-700">
+                    {SCHEDULE_CALLBACK_LABEL} <span className="text-amber-700">({tag})</span>
+                  </p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {QUICK_PRESETS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => (p.custom ? applyPreset(undefined, p.custom) : applyPreset(p.mins))}
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mb-4 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-neutral-600">Date</label>
+                      <input
+                        type="date"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        min={today}
+                        className="w-full rounded-lg border border-neutral-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-neutral-600">Time</label>
+                      <input
+                        type="time"
+                        value={time}
+                        onChange={(e) => setTime(e.target.value)}
+                        className="w-full rounded-lg border border-neutral-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                  {error && (
+                    <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStep("not_connect")}
+                      className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSchedule}
+                      disabled={loading}
+                      className="flex-1 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {loading ? "Saving..." : "Schedule Callback"}
+                    </button>
+                  </div>
+                </>
               )}
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStep("not_connect")}
-                  className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSchedule}
-                  disabled={loading}
-                  className="flex-1 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {loading ? "Saving..." : "Schedule Callback"}
-                </button>
-              </div>
             </>
           )}
         </div>

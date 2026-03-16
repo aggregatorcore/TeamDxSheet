@@ -77,6 +77,24 @@ export function IconRepeatRefresh({ className }: { className?: string }) {
   );
 }
 
+/** Flow icon: Talk Started (baat start hui) – check in circle. */
+function IconTalkStarted({ className }: { className?: string }) {
+  return (
+    <svg className={className} aria-hidden {...svgProps}>
+      <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+  );
+}
+
+/** Flow icon: Talk Not Started (baat start nhi hui) – X in circle. */
+function IconTalkNotStarted({ className }: { className?: string }) {
+  return (
+    <svg className={className} aria-hidden {...svgProps}>
+      <path d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+  );
+}
+
 const TAG_ICON_MAP: Record<string, ({ className }: { className?: string }) => JSX.Element> = {
   "No Answer": IconNoAnswer,
   "Switch Off": IconSwitchOff,
@@ -94,5 +112,16 @@ const TAG_ICON_MAP: Record<string, ({ className }: { className?: string }) => JS
 
 export function TagIcon({ tag, className }: { tag: string; className?: string }) {
   const Icon = TAG_ICON_MAP[tag] ?? IconTag;
+  return <Icon className={className} />;
+}
+
+/** Flow icons: Talk Started (Connected), Talk Not Started (Not Connected). */
+const FLOW_ICON_MAP: Record<string, ({ className }: { className?: string }) => JSX.Element> = {
+  Connected: IconTalkStarted,
+  "Not Connected": IconTalkNotStarted,
+};
+
+export function FlowIcon({ flow, className }: { flow: string; className?: string }) {
+  const Icon = FLOW_ICON_MAP[flow] ?? IconTag;
   return <Icon className={className} />;
 }

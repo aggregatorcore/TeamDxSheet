@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { formatTimeTo12h, formatWeekOffDisplay } from "@/lib/shiftUtils";
 
 /** Client-side admin emails (env or fallback) – so nav shows even if server/API miss. */
 const ADMIN_EMAILS_LIST = (
@@ -29,11 +30,11 @@ interface DashboardShellProps {
 export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, userName }: DashboardShellProps) {
   const adminByEmail = useMemo(() => isAdminByEmail(userEmail), [userEmail]);
   const [isAdmin, setIsAdmin] = useState(initialAdmin || adminByEmail);
+  const [shift, setShift] = useState<{ shift_start_time: string | null; shift_end_time: string | null; week_off_days: string | null } | null>(null);
 
   useEffect(() => {
     if (adminByEmail) {
       setIsAdmin(true);
-      return;
     }
     const controller = new AbortController();
     fetch("/api/profile", {
@@ -48,6 +49,13 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
         } else if (initialAdmin) {
           setIsAdmin(true);
         }
+        if (data && (data.shift_start_time != null || data.shift_end_time != null || data.week_off_days != null)) {
+          setShift({
+            shift_start_time: data.shift_start_time ?? null,
+            shift_end_time: data.shift_end_time ?? null,
+            week_off_days: data.week_off_days ?? null,
+          });
+        }
       })
       .catch(() => {
         if (initialAdmin) setIsAdmin(true);
@@ -61,10 +69,12 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
   const view =
     pathname === "/dashboard/create-user"
       ? "create-user"
-      : pathname === "/dashboard/leads"
-        ? "leads-mgmt"
-        : searchParams.get("view") || "leads";
-  const isBucketsView = view === "green" || view === "exhaust" || view === "review";
+      : pathname === "/dashboard/shifts"
+        ? "shifts"
+        : pathname === "/dashboard/leads"
+          ? "leads-mgmt"
+          : searchParams.get("view") || "work";
+  const isBucketsView = view === "green" || view === "exhaust" || view === "review" || view === "newAssigned";
 
   const handleLogout = async () => {
     const { createClient } = await import("@/lib/supabase/client");
@@ -103,12 +113,18 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
               )}
               {!isAdmin && userEmail && (
                 <p className="truncate text-xs text-neutral-500 sm:text-sm" title={userEmail}>
-                  {displayName}
+                  {displayName} · The Visa Fox
                 </p>
               )}
             </div>
           </Link>
           <div className="flex shrink-0 items-center gap-2">
+            {!isAdmin && shift?.shift_start_time && shift?.shift_end_time && (
+              <span className="max-w-[200px] truncate rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 sm:max-w-none" title="Your shift">
+                My shift: {formatTimeTo12h(shift.shift_start_time)} – {formatTimeTo12h(shift.shift_end_time)}
+                {shift.week_off_days ? ` · Off: ${formatWeekOffDisplay(shift.week_off_days)}` : ""}
+              </span>
+            )}
             {isAdmin && userEmail && (
               <span className="hidden max-w-[140px] truncate rounded-md bg-neutral-100 px-2.5 py-1.5 text-xs text-neutral-600 sm:block" title={userEmail}>
                 {userEmail}
@@ -137,9 +153,21 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
             </button>
           </div>
         </div>
-        {/* Row 2: Full-width nav – Leads | Work | Buckets | Live | Users always visible */}
-        <nav className="flex w-full items-center gap-0.5 border-t border-neutral-100 bg-neutral-50/80 px-2 py-1.5 sm:px-4">
+        {/* Row 2: Full-width nav – Work (pehle) | Leads | Buckets | Live | Users + Search on dashboard */}
+        <nav className="flex w-full flex-wrap items-center gap-2 border-t border-neutral-100 bg-neutral-50/80 px-2 py-1.5 sm:px-4">
           <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+            <Link
+              href="/dashboard?view=work"
+              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${navClass("work")}`}
+            >
+              Work
+            </Link>
+            <Link
+              href="/dashboard?view=waitingList"
+              className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${navClass("waitingList")}`}
+            >
+              Waiting list
+            </Link>
             {isAdmin && (
               <Link
                 href="/dashboard/leads"
@@ -149,10 +177,10 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
               </Link>
             )}
             <Link
-              href="/dashboard"
+              href="/dashboard?view=leads"
               className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${navClass("leads")}`}
             >
-              {isAdmin ? "Work" : "My Leads"}
+              {isAdmin ? "My Leads" : "My Leads"}
             </Link>
             <Link
               href="/dashboard?view=green"
@@ -172,6 +200,16 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
             )}
             {isAdmin && (
               <Link
+                href="/dashboard/shifts"
+                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
+                  view === "shifts" ? "bg-slate-600 text-white" : "text-slate-700 hover:bg-slate-50 hover:text-slate-800"
+                }`}
+              >
+                Shifts
+              </Link>
+            )}
+            {isAdmin && (
+              <Link
                 href="/dashboard/create-user"
                 className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
                   view === "create-user" ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
@@ -181,6 +219,43 @@ export function DashboardShell({ children, isAdmin: initialAdmin, userEmail, use
               </Link>
             )}
           </div>
+          {pathname === "/dashboard" && (
+            <div className="ml-auto flex min-w-0 flex-1 items-center gap-2 sm:min-w-[200px] sm:max-w-[280px]">
+              <label htmlFor="dashboard-lead-search" className="sr-only">
+                Search leads
+              </label>
+              <input
+                id="dashboard-lead-search"
+                type="search"
+                value={searchParams.get("q") ?? ""}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  const viewParam = searchParams.get("view");
+                  const params = new URLSearchParams();
+                  if (viewParam) params.set("view", viewParam);
+                  if (q) params.set("q", q);
+                  router.replace(params.toString() ? `/dashboard?${params}` : "/dashboard");
+                }}
+                placeholder="Last 5 digits, ID, name, city…"
+                className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+                aria-label="Search leads"
+              />
+              {(searchParams.get("q") ?? "").trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const viewParam = searchParams.get("view");
+                    const params = new URLSearchParams();
+                    if (viewParam) params.set("view", viewParam);
+                    router.replace(params.toString() ? `/dashboard?${params}` : "/dashboard");
+                  }}
+                  className="shrink-0 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
         </nav>
       </header>
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>

@@ -1,12 +1,14 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lead, LeadCategory } from "@/types/lead";
+import { normalizeLeadNumber } from "@/lib/leadNumber";
 
 function dbRowToLead(row: Record<string, unknown>): Lead {
   return {
     id: String(row.id ?? ""),
     rowIndex: 0,
     source: String(row.source ?? ""),
+    token: row.token != null ? String(row.token) : undefined,
     name: String(row.name ?? ""),
     place: String(row.place ?? ""),
     number: String(row.number ?? ""),
@@ -27,6 +29,42 @@ function dbRowToLead(row: Record<string, unknown>): Lead {
 
 const WHATSAPP_FOLLOWUP_MAX_DAYS = 2;
 
+/** Find a lead for this user with the same normalized number (for duplicate check). Returns null if none. */
+export async function getLeadByAssignedAndNumber(
+  assignedTo: string,
+  number: string,
+  client?: SupabaseClient
+): Promise<Lead | null> {
+  const supabase = client ?? (await createClient());
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("assigned_to", assignedTo)
+    .eq("is_invalid", false);
+
+  if (error) throw error;
+  const norm = normalizeLeadNumber(number);
+  if (!norm) return null;
+  const row = (data ?? []).find((r) => normalizeLeadNumber(r.number) === norm);
+  return row ? dbRowToLead(row) : null;
+}
+
+/** Global: find any lead (any assigned_to) with this normalized number. Mobile number = primary key for lead. Uses admin client. */
+export async function getLeadByNumber(number: string): Promise<Lead | null> {
+  const norm = normalizeLeadNumber(number);
+  if (!norm) return null;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("leads")
+    .select("*")
+    .eq("is_invalid", false)
+    .limit(5000);
+
+  if (error) throw error;
+  const row = (data ?? []).find((r) => normalizeLeadNumber(r.number) === norm);
+  return row ? dbRowToLead(row) : null;
+}
+
 export async function getLeadsForUser(
   userEmail: string,
   client?: SupabaseClient
@@ -45,6 +83,8 @@ export async function getLeadsForUser(
   const notInReview = (data ?? []).filter((row) => !row.is_in_review);
   // Filter out document received (green bucket) leads (column may not exist in older DBs)
   const notDocumentReceived = notInReview.filter((row) => !row.is_document_received);
+  // Filter out new-assigned (hold limit reached; admin bucket only)
+  const notNewAssigned = notDocumentReceived.filter((row) => !(row as { is_new_assigned?: boolean }).is_new_assigned);
 
   const now = Date.now();
   const twoDaysMs = WHATSAPP_FOLLOWUP_MAX_DAYS * 24 * 60 * 60 * 1000;
@@ -53,7 +93,7 @@ export async function getLeadsForUser(
     r.tags === "WhatsApp Flow Active" ||
     (r.tags === "Incoming Off" && !!r.whatsapp_followup_started_at) ||
     r.tags === "WhatsApp No Reply";
-  const filtered = notDocumentReceived.filter((row) => {
+  const filtered = notNewAssigned.filter((row) => {
     if (isWhatsAppFollowup(row)) {
       const started = new Date((row.whatsapp_followup_started_at as string) || 0).getTime();
       if (now - started >= twoDaysMs) {
@@ -88,6 +128,7 @@ export async function updateLead(
   if (updates.flow !== undefined) body.flow = updates.flow;
   if (updates.tags !== undefined) body.tags = updates.tags;
   if (updates.note !== undefined) body.note = updates.note;
+  if (updates.source !== undefined) body.source = updates.source;
   if (updates.name !== undefined) body.name = updates.name;
   if (updates.place !== undefined) body.place = updates.place;
   if (updates.category !== undefined) body.category = updates.category;
@@ -101,6 +142,7 @@ export async function updateLead(
   if ((updates as { isInvalid?: boolean }).isInvalid !== undefined)
     body.is_invalid = (updates as { isInvalid?: boolean }).isInvalid;
   if (updates.assignedTo !== undefined) body.assigned_to = updates.assignedTo;
+  if (updates.token !== undefined) body.token = updates.token === null || updates.token === "" ? null : String(updates.token);
 
   const { error } = await supabase.from("leads").update(body).eq("id", id);
   if (error) throw error;
@@ -157,9 +199,12 @@ export async function scheduleCallback(
   id: string,
   callbackTime: string,
   userEmail: string,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  token?: string
 ): Promise<void> {
-  await updateLead(id, { callbackTime, category: "callback" }, userEmail, client);
+  const updates: Parameters<typeof updateLead>[1] = { callbackTime, category: "callback" };
+  if (token !== undefined) updates.token = token;
+  await updateLead(id, updates, userEmail, client);
 }
 
 export async function markOverdue(id: string, userEmail: string): Promise<void> {
@@ -189,6 +234,38 @@ export async function getReviewLeadsForAdmin(): Promise<Lead[]> {
     .eq("is_in_review", true)
     .order("updated_at", { ascending: false });
 
+  if (error) throw error;
+  return (data ?? []).map((row, i) => ({
+    ...dbRowToLead(row),
+    rowIndex: i + 1,
+  }));
+}
+
+/** Move lead to New Assigned bucket (hold limit reached). Clears callback; does not set is_invalid. Admin-only bucket. */
+export async function markLeadNewAssigned(
+  id: string,
+  note: string | undefined,
+  client?: SupabaseClient
+): Promise<void> {
+  const supabase = client ?? (await createClient());
+  const body: Record<string, unknown> = {
+    is_new_assigned: true,
+    callback_time: null,
+    category: "active",
+    updated_at: new Date().toISOString(),
+  };
+  if (note !== undefined) body.note = note;
+  const { error } = await supabase.from("leads").update(body).eq("id", id);
+  if (error) throw error;
+}
+
+export async function getNewAssignedLeadsForAdmin(): Promise<Lead[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("is_new_assigned", true)
+    .order("updated_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row, i) => ({
     ...dbRowToLead(row),
@@ -283,13 +360,14 @@ export async function getLeadsForUserAsAdmin(userEmail: string): Promise<Lead[]>
 
   const notInReview = (data ?? []).filter((row) => !row.is_in_review);
   const notDocumentReceived = notInReview.filter((row) => !row.is_document_received);
+  const notNewAssigned = notDocumentReceived.filter((row) => !(row as { is_new_assigned?: boolean }).is_new_assigned);
   const now = Date.now();
   const twoDaysMs = WHATSAPP_FOLLOWUP_MAX_DAYS * 24 * 60 * 60 * 1000;
   const isWhatsAppFollowup = (r: { tags: string; whatsapp_followup_started_at?: unknown }) =>
     r.tags === "WhatsApp Flow Active" ||
     (r.tags === "Incoming Off" && !!r.whatsapp_followup_started_at) ||
     r.tags === "WhatsApp No Reply";
-  const filtered = notDocumentReceived.filter((row) => {
+  const filtered = notNewAssigned.filter((row) => {
     if (isWhatsAppFollowup(row)) {
       const started = new Date((row.whatsapp_followup_started_at as string) || 0).getTime();
       if (now - started >= twoDaysMs) return false;
@@ -303,7 +381,7 @@ export async function getLeadsForUserAsAdmin(userEmail: string): Promise<Lead[]>
   }));
 }
 
-/** Get telecaller's bucket leads (admin view only). bucket: green | review | exhaust */
+/** Get telecaller's bucket leads (admin view only). bucket: green | review | exhaust | new_assigned */
 export async function getLeadsForUserAsAdminByBucket(
   userEmail: string,
   bucket: "green" | "review" | "exhaust"

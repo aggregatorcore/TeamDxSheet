@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLeadByNumber } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 async function isAdmin(userId: string): Promise<boolean> {
@@ -35,20 +36,36 @@ export async function POST(request: Request) {
     }
 
     const adminClient = createAdminClient();
+    let distributed = 0;
+    let skippedDuplicates = 0;
     let idx = 0;
     for (const id of leadIds) {
       const email = assignTo[idx % assignTo.length];
       idx++;
+      const { data: leadRow } = await adminClient
+        .from("leads")
+        .select("number")
+        .eq("id", id)
+        .eq("assigned_to", "pool")
+        .single();
+      if (!leadRow) continue;
+      const number = String(leadRow.number ?? "").trim();
+      const existing = await getLeadByNumber(number);
+      if (existing && existing.id !== id) {
+        await adminClient.from("leads").update({ is_invalid: true, updated_at: new Date().toISOString() }).eq("id", id);
+        skippedDuplicates++;
+        continue;
+      }
       const { error } = await adminClient
         .from("leads")
         .update({ assigned_to: email, updated_at: new Date().toISOString() })
         .eq("id", id)
         .eq("assigned_to", "pool");
-
       if (error) throw error;
+      distributed++;
     }
 
-    return NextResponse.json({ ok: true, distributed: leadIds.length });
+    return NextResponse.json({ ok: true, distributed, skippedDuplicates });
   } catch (err) {
     console.error("POST /api/leads/distribute error:", err);
     return NextResponse.json(

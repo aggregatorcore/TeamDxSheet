@@ -5,7 +5,8 @@ import type { Lead } from "@/types/lead";
 import { CallbackCountdown } from "@/components/CallbackCountdown";
 import { LeadDetailModal } from "@/components/LeadDetailModal";
 import { useCurrentTime } from "@/hooks/useCurrentTime";
-import { BLINK_BEFORE_SECONDS, BUCKET_LABELS, GRACE_PERIOD_HOURS, FLOW_COLORS, TAG_COLORS } from "@/lib/constants";
+import { BLINK_BEFORE_SECONDS, BUCKET_LABELS, FLOW_COLORS, FLOW_DISPLAY_LABELS, GRACE_PERIOD_HOURS, TAG_COLORS } from "@/lib/constants";
+import { FlowIcon } from "./TagIcons";
 import { getDisplayId } from "@/lib/displayId";
 import { getEffectiveTag } from "@/lib/leadNote";
 import type { FlowOption, TagOption } from "@/types/lead";
@@ -394,8 +395,9 @@ export function LiveSheetTable() {
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5 text-slate-800">{lead.place}</td>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5 text-slate-800">{lead.number}</td>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5">
-                                  <span className={`inline-flex rounded border px-1.5 py-0.5 text-xs font-medium ${flowColor(lead.flow)}`}>
-                                    {lead.flow}
+                                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium ${flowColor(lead.flow)}`}>
+                                    <FlowIcon flow={lead.flow} className="h-3.5 w-3.5 shrink-0" />
+                                    {FLOW_DISPLAY_LABELS[lead.flow as FlowOption] ?? lead.flow}
                                   </span>
                                 </td>
                                 <td className="border-r-2 border-slate-200 px-2 py-1.5">

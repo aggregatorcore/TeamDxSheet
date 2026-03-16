@@ -8,16 +8,21 @@ import { GreenBucketTable } from "@/components/GreenBucketTable";
 import { AdminLeadsTable } from "@/components/AdminLeadsTable";
 import { LiveSheetTable } from "@/components/LiveSheetTable";
 import { CallbackReminder } from "@/components/CallbackReminder";
+import { WorkTable } from "@/components/WorkTable";
+import { WaitingListTable } from "@/components/WaitingListTable";
+import { filterLeadsBySearch } from "@/lib/leadSearch";
+import { isCallbackDateAfterToday } from "@/lib/dateUtils";
 import type { Lead } from "@/types/lead";
 
-type ViewMode = "leads" | "green" | "exhaust" | "review" | "live";
+type ViewMode = "work" | "waitingList" | "leads" | "green" | "exhaust" | "review" | "newAssigned" | "live";
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [greenLeads, setGreenLeads] = useState<Lead[]>([]);
   const [exhaustLeads, setExhaustLeads] = useState<Lead[]>([]);
   const [reviewLeads, setReviewLeads] = useState<Lead[]>([]);
-  const [view, setView] = useState<ViewMode>("leads");
+  const [newAssignedLeads, setNewAssignedLeads] = useState<Lead[]>([]);
+  const [view, setView] = useState<ViewMode>("work");
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
@@ -44,26 +49,40 @@ export default function DashboardPage() {
   };
 
   const fetchAdminData = async () => {
-    const [exhaustRes, reviewRes] = await Promise.all([
+    const [exhaustRes, reviewRes, newAssignedRes] = await Promise.all([
       fetch("/api/leads?admin=true"),
       fetch("/api/leads?admin=true&review=true"),
+      fetch("/api/leads?admin=true&bucket=new_assigned"),
     ]);
     if (exhaustRes.status === 401) {
       router.push("/");
       return;
     }
-    if (exhaustRes.status === 403 || reviewRes.status === 403) {
+    if (exhaustRes.status === 403 || reviewRes.status === 403 || newAssignedRes.status === 403) {
       return;
     }
     const exhaustData = await exhaustRes.json();
     const reviewData = await reviewRes.json();
+    const newAssignedData = await newAssignedRes.json();
     setExhaustLeads(Array.isArray(exhaustData) ? exhaustData : []);
     setReviewLeads(Array.isArray(reviewData) ? reviewData : []);
+    setNewAssignedLeads(Array.isArray(newAssignedData) ? newAssignedData : []);
+  };
+
+  const fetchNewAssignedLeads = async () => {
+    const res = await fetch("/api/leads?admin=true&bucket=new_assigned");
+    if (res.status === 401) {
+      router.push("/");
+      return;
+    }
+    if (res.status === 403) return;
+    const data = await res.json();
+    setNewAssignedLeads(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => {
     const v = searchParams.get("view") as ViewMode | null;
-    setView((v === "green" || v === "exhaust" || v === "review" || v === "live" || v === "leads") ? v : "leads");
+    setView((v === "work" || v === "waitingList" || v === "green" || v === "exhaust" || v === "review" || v === "newAssigned" || v === "live" || v === "leads") ? v : "work");
   }, [searchParams]);
 
   useEffect(() => {
@@ -95,13 +114,13 @@ export default function DashboardPage() {
   }, [view]);
 
   useEffect(() => {
-    if ((view === "exhaust" || view === "review") && isAdmin) fetchAdminData();
+    if ((view === "exhaust" || view === "review" || view === "newAssigned") && isAdmin) fetchAdminData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchAdminData stable, run on view/isAdmin
   }, [view, isAdmin]);
 
   const setViewWithUrl = (v: ViewMode) => {
     setView(v);
-    const url = v === "leads" ? "/dashboard" : `/dashboard?view=${v}`;
+    const url = v === "work" ? "/dashboard" : `/dashboard?view=${v}`;
     router.replace(url);
   };
 
@@ -114,6 +133,24 @@ export default function DashboardPage() {
     );
   }
 
+  const searchQuery = searchParams.get("q") ?? "";
+  const hasSearch = searchQuery.trim() !== "";
+  const currentLeads =
+    view === "leads"
+      ? hasSearch
+        ? leads
+        : leads.filter((l) => !isCallbackDateAfterToday(l.callbackTime))
+      : view === "green"
+        ? greenLeads
+        : view === "exhaust"
+          ? exhaustLeads
+          : view === "review"
+            ? reviewLeads
+            : view === "newAssigned"
+              ? newAssignedLeads
+              : [];
+  const filteredLeads = filterLeadsBySearch(currentLeads, searchQuery);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-3 pb-2">
       {(view === "leads" || view === "green") && (
@@ -122,8 +159,8 @@ export default function DashboardPage() {
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-white shadow">
-        {/* Buckets sub-tabs: Green | Exhaust | Review (inside Buckets) */}
-        {(view === "green" || view === "exhaust" || view === "review") && (
+        {/* Buckets sub-tabs: Green | Exhaust | Review | New Assigned (inside Buckets) */}
+        {(view === "green" || view === "exhaust" || view === "review" || view === "newAssigned") && (
           <div className="flex shrink-0 border-b border-neutral-200 bg-neutral-50 px-3 py-1">
             <div className="flex rounded-lg border border-neutral-200 bg-white p-0.5">
               <button
@@ -161,20 +198,41 @@ export default function DashboardPage() {
                   >
                     Review ({reviewLeads.length})
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewWithUrl("newAssigned")}
+                    className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                      view === "newAssigned"
+                        ? "bg-slate-600 text-white shadow-sm"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-800"
+                    }`}
+                  >
+                    New Assigned ({newAssignedLeads.length})
+                  </button>
                 </>
               )}
             </div>
           </div>
         )}
 
-        {view === "leads" ? (
+        {view === "work" ? (
+          <WorkTable
+            leads={leads}
+            onRefresh={fetchLeads}
+            onLeadUpdate={(id, updates) => {
+              setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+            }}
+          />
+        ) : view === "waitingList" ? (
+          <WaitingListTable leads={leads} onRefresh={fetchLeads} />
+        ) : view === "leads" ? (
           leads.length === 0 ? (
             <p className="flex flex-1 items-center justify-center p-8 text-center text-neutral-600">
               No leads assigned to you. Contact admin.
             </p>
           ) : (
             <LeadTable
-              leads={leads}
+              leads={filteredLeads}
               onRefresh={fetchLeads}
               onLeadUpdate={(id, updates) => {
                 setLeads((prev) =>
@@ -193,18 +251,18 @@ export default function DashboardPage() {
               No leads in Green Bucket
             </p>
           ) : (
-            <GreenBucketTable leads={greenLeads} onRefresh={fetchGreenLeads} />
+            <GreenBucketTable leads={filteredLeads} onRefresh={fetchGreenLeads} />
           )
-        ) : (view === "exhaust" || view === "review") && isAdmin ? (
-          (view === "exhaust" ? exhaustLeads : reviewLeads).length === 0 ? (
+        ) : (view === "exhaust" || view === "review" || view === "newAssigned") && isAdmin ? (
+          (view === "exhaust" ? exhaustLeads : view === "review" ? reviewLeads : newAssignedLeads).length === 0 ? (
             <p className="flex flex-1 items-center justify-center p-8 text-center text-neutral-500">
-              {view === "exhaust" ? "No exhausted leads" : "No leads in review"}
+              {view === "exhaust" ? "No exhausted leads" : view === "review" ? "No leads in review" : "No leads in New Assigned"}
             </p>
           ) : (
             <AdminLeadsTable
-              leads={view === "exhaust" ? exhaustLeads : reviewLeads}
-              variant={view === "exhaust" ? "exhaust" : "review"}
-              onRefresh={fetchAdminData}
+              leads={filteredLeads}
+              variant={view === "exhaust" ? "exhaust" : view === "review" ? "review" : "newAssigned"}
+              onRefresh={view === "newAssigned" ? fetchNewAssignedLeads : fetchAdminData}
             />
           )
         ) : view === "live" && isAdmin ? (

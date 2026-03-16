@@ -19,6 +19,12 @@ export const TAG_COLORS: Record<TagOption | "overdue", string> = {
   overdue: `bg-red-600 text-white border border-red-700 ${badgeBase}`,
 };
 
+/** Display labels for root flows (Talk Started / Talk Not Started). Use in UI; API/DB still use Connected | Not Connected. */
+export const FLOW_DISPLAY_LABELS: Record<FlowOption, string> = {
+  Connected: "Talk Started",
+  "Not Connected": "Talk Not Started",
+};
+
 /** Text-only colors for Flow in table (no button/badge style) */
 export const FLOW_TEXT_COLORS: Record<FlowOption, string> = {
   Connected: "text-emerald-600",
@@ -61,11 +67,12 @@ export const CALL_NOW_LABEL = "Call Now";
 export const SCHEDULE_CALLBACK_LABEL = "Schedule callback";
 export const MARK_INVALID_LABEL = "Mark Invalid";
 
-/** Global: bucket names for overlays/headers (Review, Green, Exhaust). */
+/** Global: bucket names for overlays/headers (Review, Green, Exhaust, New Assigned). */
 export const BUCKET_LABELS = {
   review: "Review",
   green: "Green",
   exhaust: "Exhaust",
+  newAssigned: "New Assigned",
 } as const;
 
 export const GRACE_PERIOD_HOURS = 2;
@@ -90,6 +97,13 @@ export const WHATSAPP_FOLLOWUP_HOURS = 1;
 
 /** WhatsApp No Reply: max days before lead hides */
 export const WHATSAPP_FOLLOWUP_MAX_DAYS = 2;
+
+/**
+ * Auto-schedule rule (global): No Answer, Switch Off, Busy IVR cycles.
+ * Attempt 1 = 2h, Attempt 2 = 8h, Attempt 3 = 12h from now; backend applies shift logic.
+ * Index 0 = attempt 1, index 1 = attempt 2, index 2 = attempt 3.
+ */
+export const CALLBACK_AUTO_SCHEDULE_HOURS = [2, 8, 12] as const;
 
 /** @deprecated Use openWhatsApp from @/lib/whatsapp instead */
 export const WA_TAB_TARGET = "whatsapp_tab";

@@ -20,23 +20,22 @@ export async function GET(request: Request) {
     }
     const { supabase, user } = auth;
 
-    let profile: { role?: string; full_name?: string | null } | null = null;
+    type ProfileRow = { role?: string; shift_start_time?: string | null; shift_end_time?: string | null; week_off_days?: string | null };
+    const profileSelect = "role, shift_start_time, shift_end_time, week_off_days";
+    let profile: ProfileRow | null = null;
     const adminClient = tryCreateAdminClient();
-    if (adminClient) {
-      const { data } = await adminClient
-        .from("profiles")
-        .select("role, full_name")
-        .eq("id", user.id)
-        .single();
-      profile = data;
-    }
-    if (!profile) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("role, full_name")
-        .eq("id", user.id)
-        .single();
-      profile = data;
+    const client = adminClient ?? supabase;
+    const { data: dataFull, error: errFull } = await client
+      .from("profiles")
+      .select(profileSelect)
+      .eq("id", user.id)
+      .single();
+    if (!errFull && dataFull) {
+      profile = dataFull as ProfileRow;
+    } else {
+      // Fallback: shift columns may not exist (migration 009 not run) – fetch only role
+      const { data: dataRole } = await client.from("profiles").select("role").eq("id", user.id).single();
+      profile = dataRole ? { role: (dataRole as { role?: string }).role } : null;
     }
 
     const roleFromProfile = profile?.role?.toLowerCase();
@@ -50,7 +49,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       role,
       email: user.email ?? null,
-      full_name: profile?.full_name ?? null,
+      shift_start_time: profile?.shift_start_time ?? null,
+      shift_end_time: profile?.shift_end_time ?? null,
+      week_off_days: profile?.week_off_days ?? null,
     });
   } catch (err) {
     console.error("GET /api/profile error:", err);

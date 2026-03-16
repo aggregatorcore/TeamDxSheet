@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Not Connected Flows – Table Guide | TeamDX · The Visa Fox</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, 'Segoe UI', sans-serif; max-width: 900px; margin: 0 auto; padding: 24px; color: #1e293b; line-height: 1.5; }
+    h1 { font-size: 1.5rem; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-top: 0; }
+    h2 { font-size: 1.15rem; margin-top: 28px; color: #0f172a; }
+    p { margin: 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 20px; }
+    .row-layout { background: #fefce8; padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 0.9rem; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 0.85rem; color: #64748b; }
+    @media print {
+      body { padding: 16px; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Not Connected Flows – Complete Table Guide</h1>
+  <p class="meta"><strong>TeamDX Lead Manager · The Visa Fox</strong><br>Table format – No Answer, Switch Off, Busy IVR, Incoming Off, Invalid Number</p>
+  <p class="meta" style="background:#f0fdf4;padding:10px;border-radius:6px;border:1px solid #bbf7d0;"><strong>Global rule:</strong> Not Connected = <strong>4 cycles</strong> + <strong>1 terminal</strong> (Invalid Number). <strong>Terminal</strong> = sirf exhaust. Review terminal nahi (review = senior review junction; back/forward ya exhaust). E.g. Invalid Number, WhatsApp Not Available. Same meaning everywhere.</p>
+
+  <h2>1. No Answer Cycle – Complete Flow</h2>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Where</th><th>User action / System</th><th>Result / Next</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Dial</td><td>CallDialModal</td><td>Row click → Dial</td><td>Call lagta hai</td></tr>
+      <tr><td>2</td><td>Connect?</td><td>CallDialModal</td><td>"Did the call connect?"</td><td><strong>Not connected</strong></td></tr>
+      <tr><td>3</td><td>Reason</td><td>CallDialModal</td><td>"Why didn't it connect?"</td><td><strong>No Answer</strong> select</td></tr>
+      <tr><td>4</td><td>Schedule</td><td>CallDialModal</td><td>Date + Time → Schedule Callback</td><td>Lead save: tag No Answer, callbackTime, category callback</td></tr>
+      <tr><td>5</td><td>Table – counting</td><td>Lead table</td><td>Row: amber card, No Answer pill, countdown, date</td><td>Wait / refresh</td></tr>
+      <tr><td>6a</td><td>Call now</td><td>Lead table</td><td>Countdown khatam → Call Now</td><td>CallbackReminderModal</td></tr>
+      <tr><td>6b</td><td>Overdue</td><td>Lead table</td><td>Time + grace nikal gaya → row red</td><td>OverdueCallModal</td></tr>
+      <tr><td>7a</td><td>Reminder – Dial</td><td>CallbackReminderModal</td><td>"Call this lead now" → Dial</td><td>Phir se call</td></tr>
+      <tr><td>7b</td><td>Reminder – Connect?</td><td>CallbackReminderModal</td><td>"Did the call connect?"</td><td>Connected → step 9 / Not connected → step 8</td></tr>
+      <tr><td>8</td><td>Reschedule</td><td>CallbackReminderModal</td><td>Not connected → reason → Schedule again</td><td>Lead update, attempt +1</td></tr>
+      <tr><td>9</td><td>Connected</td><td>—</td><td>Interested / Not Interested</td><td>Cycle khatam</td></tr>
+      <tr><td>10</td><td>Overdue – Dial</td><td>OverdueCallModal</td><td>Dial</td><td>CallDialModal (step 1)</td></tr>
+      <tr><td>11</td><td>Cycle end</td><td>—</td><td>Naya tag apply</td><td>Naya cycle, attempt 1</td></tr>
+    </tbody>
+  </table>
+  <p class="row-layout"><strong>Table row:</strong> Attempt badge (2+) | No Answer pill | Divider | Countdown / Call Now / Overdue + date | Timeline (i)</p>
+
+  <h2>2. Switch Off Cycle – Complete Flow</h2>
+  <p>Same as No Answer; tag = <strong>Switch Off</strong>. Table row: amber card + <strong>Switch Off</strong> pill + countdown + same actions.</p>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Where</th><th>User action / System</th><th>Result / Next</th></tr></thead>
+    <tbody>
+      <tr><td>1–3</td><td>Dial → Connect? → Reason</td><td>CallDialModal</td><td>Not connected → <strong>Switch Off</strong></td><td>—</td></tr>
+      <tr><td>4</td><td>Schedule</td><td>CallDialModal</td><td>Date + Time → Schedule Callback</td><td>Lead: tag <strong>Switch Off</strong>, callbackTime</td></tr>
+      <tr><td>5–11</td><td>Table → CallbackReminder / Overdue</td><td>Same as No Answer</td><td>Same flow</td><td>Reschedule / Connected / Cycle end</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. Busy IVR Cycle – Complete Flow</h2>
+  <p>Same as No Answer; tag = <strong>Busy IVR</strong>. Table row: amber card + <strong>Busy IVR</strong> pill + countdown + same actions.</p>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Where</th><th>User action / System</th><th>Result / Next</th></tr></thead>
+    <tbody>
+      <tr><td>1–3</td><td>Dial → Connect? → Reason</td><td>CallDialModal</td><td>Not connected → <strong>Busy IVR</strong></td><td>—</td></tr>
+      <tr><td>4</td><td>Schedule</td><td>CallDialModal</td><td>Date + Time → Schedule Callback</td><td>Lead: tag <strong>Busy IVR</strong>, callbackTime</td></tr>
+      <tr><td>5–11</td><td>Table → CallbackReminder / Overdue</td><td>Same as No Answer</td><td>Same flow</td><td>Reschedule / Connected / Cycle end</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4. Incoming Off Cycle – Complete Flow</h2>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Where</th><th>User action / System</th><th>Result / Next</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Dial</td><td>CallDialModal</td><td>Row click → Dial</td><td>Call lagta hai</td></tr>
+      <tr><td>2</td><td>Connect?</td><td>CallDialModal</td><td>"Did the call connect?"</td><td><strong>Not connected</strong></td></tr>
+      <tr><td>3</td><td>Reason</td><td>CallDialModal</td><td>"Why didn't it connect?"</td><td><strong>Incoming Off</strong> select</td></tr>
+      <tr><td>4</td><td>Try WhatsApp</td><td>CallDialModal</td><td>Incoming Off → (Save nahi)</td><td><strong>WhatsAppModal</strong> open</td></tr>
+      <tr><td>5</td><td>Conversation start?</td><td>WhatsAppModal</td><td>"Did conversation start?"</td><td><strong>Yes</strong> → step 9 / <strong>No</strong> → step 6</td></tr>
+      <tr><td>6</td><td>No – sub choice</td><td>WhatsAppModal</td><td><strong>WhatsApp Not Available</strong> ya <strong>WhatsApp No Reply</strong></td><td>—</td></tr>
+      <tr><td>7a</td><td>Not Available</td><td>WhatsAppModal</td><td>Apply → lead update</td><td>Tag Incoming Off, move to Admin/exhaust</td></tr>
+      <tr><td>7b</td><td>No Reply</td><td>WhatsAppModal</td><td>Apply → lead update</td><td>Tag <strong>WhatsApp Flow Active</strong>, callback, follow-up cycle</td></tr>
+      <tr><td>8</td><td>Table (collaboration)</td><td>Lead table</td><td>Incoming Off + WhatsApp Flow Active (expand/collapse), countdown</td><td>Follow-up / Callback flow</td></tr>
+      <tr><td>9</td><td>Yes – connected</td><td>—</td><td>Interested / Not Interested</td><td>Cycle khatam</td></tr>
+    </tbody>
+  </table>
+  <p class="row-layout"><strong>Table row:</strong> Collaboration block (Incoming Off + WhatsApp Flow Active). Overdue pe red tint.</p>
+
+  <h2>5. Invalid Number – Complete Flow</h2>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Where</th><th>User action / System</th><th>Result / Next</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Dial</td><td>CallDialModal</td><td>Row click → Dial</td><td>Call lagta hai</td></tr>
+      <tr><td>2</td><td>Connect?</td><td>CallDialModal</td><td>"Did the call connect?"</td><td><strong>Not connected</strong></td></tr>
+      <tr><td>3</td><td>Reason</td><td>CallDialModal</td><td>"Why didn't it connect?"</td><td><strong>Invalid Number</strong> select</td></tr>
+      <tr><td>4</td><td>Save / Move</td><td>CallDialModal</td><td>Lead save: tag <strong>Invalid Number</strong></td><td>InvalidNumberModal open</td></tr>
+      <tr><td>5</td><td>Confirm</td><td>InvalidNumberModal</td><td>Confirm invalid / Mark invalid</td><td>Lead → exhaust</td></tr>
+      <tr><td>6</td><td>—</td><td>—</td><td>—</td><td><strong>Cycle khatam</strong> – koi callback nahi</td></tr>
+    </tbody>
+  </table>
+  <p class="row-layout"><strong>Table row:</strong> Sirf Invalid Number tag; koi callback/countdown nahi. Confirm ke baad exhaust.</p>
+
+  <h2>6. Comparison – Not Connected Tags</h2>
+  <table>
+    <thead><tr><th>Item</th><th>No Answer</th><th>Switch Off</th><th>Busy IVR</th><th>Incoming Off</th><th>Invalid Number</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Cycle</strong></td><td>Callback</td><td>Callback</td><td>Callback</td><td>Incoming Off → WhatsApp</td><td>None (terminal)</td></tr>
+      <tr><td><strong>Callback?</strong></td><td>Yes</td><td>Yes</td><td>Yes</td><td>No (No Reply → follow-up)</td><td>No</td></tr>
+      <tr><td><strong>Table card</strong></td><td>Amber + countdown</td><td>Same</td><td>Same</td><td>Collaboration block</td><td>Tag only</td></tr>
+      <tr><td><strong>Modals</strong></td><td>CallDial → CallbackReminder / Overdue</td><td>Same</td><td>Same</td><td>CallDial → WhatsAppModal</td><td>CallDial → InvalidNumberModal</td></tr>
+      <tr><td><strong>End</strong></td><td>Connected / reschedule</td><td>Same</td><td>Same</td><td>Exhaust / WhatsApp follow-up</td><td>Exhaust</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. Table Row Layout (Callback Cards)</h2>
+  <table>
+    <thead><tr><th>Slot</th><th>Content</th></tr></thead>
+    <tbody>
+      <tr><td>1 (fixed)</td><td>Attempt badge (2+) – top-left</td></tr>
+      <tr><td>2</td><td>Tag pill: No Answer / Switch Off / Busy IVR</td></tr>
+      <tr><td>3</td><td>Divider</td></tr>
+      <tr><td>4</td><td>Countdown / Call Now / Overdue + date-time</td></tr>
+      <tr><td>5</td><td>Timeline (i) button</td></tr>
+    </tbody>
+  </table>
+
+  <p class="footer">TeamDX Lead Manager · The Visa Fox · Not Connected Flows – Table Guide</p>
+</body>
+</html>

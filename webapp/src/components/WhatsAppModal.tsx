@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { WhatsAppSubFlow } from "@/types/lead";
 import { openWhatsApp, getWaChatUrl } from "@/lib/whatsapp";
-import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, SUBFLOW_NOTE_PREFIX, WHATSAPP_DEFAULT_TEMPLATE, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, CYCLE_NAME_WHATSAPP, FLOW_DISPLAY_LABELS, SUBFLOW_NOTE_PREFIX, WHATSAPP_DEFAULT_TEMPLATE, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
+import { FlowIcon } from "./TagIcons";
 import { appendTagHistory } from "@/lib/leadNote";
 
 const WHATSAPP_TEMPLATES_KEY = "whatsapp_templates";
@@ -495,9 +496,14 @@ export function WhatsAppModal({
                       <button
                         onClick={handleAnotherNumberSubmit}
                         disabled={loading}
-                        className="rounded-xl bg-[#25D366] px-4 py-3 font-semibold text-white hover:bg-[#20BD5A] disabled:opacity-50 shadow-md"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 font-semibold text-white hover:bg-[#20BD5A] disabled:opacity-50 shadow-md"
                       >
-                        {loading ? "Saving..." : "Save & Mark Connected"}
+                        {loading ? "Saving..." : (
+                          <>
+                            <FlowIcon flow="Connected" className="h-5 w-5 shrink-0" />
+                            Save & Mark {FLOW_DISPLAY_LABELS.Connected}
+                          </>
+                        )}
                       </button>
                     </div>
                   )}

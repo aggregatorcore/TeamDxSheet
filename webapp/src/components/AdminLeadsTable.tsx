@@ -9,7 +9,7 @@ import type { Lead } from "@/types/lead";
 
 interface AdminLeadsTableProps {
   leads: Lead[];
-  variant: "exhaust" | "review";
+  variant: "exhaust" | "review" | "newAssigned";
   onRefresh: () => void;
 }
 
@@ -46,10 +46,11 @@ export function AdminLeadsTable({ leads, variant, onRefresh }: AdminLeadsTablePr
   };
 
   const isExhaust = variant === "exhaust";
-  const headerBg = isExhaust ? "bg-red-800 border-red-600 border-red-700" : "bg-amber-800 border-amber-600 border-amber-700";
-  const headerText = isExhaust ? "text-red-100" : "text-amber-100";
-  const rowBg = isExhaust ? "bg-red-50/50 hover:bg-red-50" : "bg-amber-50/50 hover:bg-amber-50";
-  const borderColor = isExhaust ? "border-red-200" : "border-amber-200";
+  const isNewAssigned = variant === "newAssigned";
+  const headerBg = isExhaust ? "bg-red-800 border-red-600 border-red-700" : isNewAssigned ? "bg-slate-700 border-slate-500 border-slate-600" : "bg-amber-800 border-amber-600 border-amber-700";
+  const headerText = isExhaust ? "text-red-100" : isNewAssigned ? "text-slate-100" : "text-amber-100";
+  const rowBg = isExhaust ? "bg-red-50/50 hover:bg-red-50" : isNewAssigned ? "bg-slate-50/50 hover:bg-slate-50" : "bg-amber-50/50 hover:bg-amber-50";
+  const borderColor = isExhaust ? "border-red-200" : isNewAssigned ? "border-slate-200" : "border-amber-200";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-lg">

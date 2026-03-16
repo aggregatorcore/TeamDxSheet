@@ -1,17 +1,23 @@
 import { getSupabaseAndUserFromRequest } from "@/lib/supabase/apiAuth";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { adjustCallbackTimeToShift } from "@/lib/callbackShiftAdjust";
+import { resolveSlotAndToken } from "@/lib/tokenSlot";
 import {
   getLeadsForUser,
   getLeadsForUserAsAdmin,
   getLeadsForUserAsAdminByBucket,
+  getLeadByAssignedAndNumber,
+  getLeadByNumber,
   updateLead,
   markLeadInvalid,
   markLeadHiddenForAdmin,
   markLeadForReview,
   markLeadDocumentReceived,
+  markLeadNewAssigned,
   getInvalidLeadsForAdmin,
   getReviewLeadsForAdmin,
+  getNewAssignedLeadsForAdmin,
   getGreenBucketLeads,
   deleteLead,
   getTelecallerLeadStats,
@@ -55,8 +61,12 @@ export async function GET(request: Request) {
       const telecallerStats = await getTelecallerLeadStats();
       return NextResponse.json({ telecallers: telecallerStats });
     }
+    const bucket = searchParams.get("bucket") as "green" | "review" | "exhaust" | "new_assigned" | null;
+    if (admin && bucket === "new_assigned") {
+      const leads = await getNewAssignedLeadsForAdmin();
+      return NextResponse.json(leads);
+    }
     if (assignedTo) {
-      const bucket = searchParams.get("bucket") as "green" | "review" | "exhaust" | null;
       if (bucket === "green" || bucket === "review" || bucket === "exhaust") {
         const leads = await getLeadsForUserAsAdminByBucket(assignedTo, bucket);
         return NextResponse.json(leads);
@@ -107,6 +117,20 @@ export async function POST(request: Request) {
     // Only admins can assign leads to others; telecallers always get their own email
     const assigned_to = userIsAdmin ? (assignedTo ?? userEmail) : userEmail;
 
+    // Global: mobile number = primary key. One lead per number in the system; merge into existing if number exists.
+    const existing = await getLeadByNumber(number ?? "");
+    if (existing) {
+      const updates: Parameters<typeof updateLead>[1] = {};
+      if (source !== undefined) updates.source = String(source ?? "").trim() || existing.source;
+      if (name !== undefined) updates.name = String(name ?? "").trim() || existing.name;
+      if (place !== undefined) updates.place = String(place ?? "").trim() || existing.place;
+      const mergedNote = existing.note ? `${existing.note} | Merged` : "Merged";
+      updates.note = mergedNote;
+      const adminClient = createAdminClient();
+      await updateLead(existing.id, updates, userEmail, adminClient);
+      return NextResponse.json({ id: existing.id, merged: true });
+    }
+
     const { data, error } = await supabase
       .from("leads")
       .insert({
@@ -146,7 +170,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, flow, tags, note, category, moveToAdmin, moveToAdminWithTag, moveToReview, moveToGreenBucket } = body;
+    const { id, flow, tags, note, category, moveToAdmin, moveToAdminWithTag, moveToReview, moveToGreenBucket, moveToNewAssigned } = body;
 
     // Ownership check for admin actions (markLeadInvalid/ForReview/Hidden use adminClient, bypass RLS)
     const verifyOwnership = async (leadId: string) => {
@@ -183,6 +207,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (moveToNewAssigned && id) {
+      if (!(await verifyOwnership(id))) {
+        return NextResponse.json({ error: "Forbidden - Lead not assigned to you" }, { status: 403 });
+      }
+      await markLeadNewAssigned(id, body.note, supabase);
+      return NextResponse.json({ ok: true });
+    }
+
     if (!id) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
@@ -209,9 +241,46 @@ export async function PATCH(request: Request) {
     if (category !== undefined) updates.category = category;
     if (body.name !== undefined) updates.name = body.name;
     if (body.place !== undefined) updates.place = body.place;
-    if (body.number !== undefined) updates.number = body.number;
-    if (body.callbackTime !== undefined)
-      updates.callbackTime = body.callbackTime;
+    if (body.number !== undefined) {
+      const existing = await getLeadByNumber(body.number as string);
+      if (existing && existing.id !== id) {
+        return NextResponse.json(
+          { error: "This number is already used by another lead. Mobile number is the primary key; one lead per number." },
+          { status: 409 }
+        );
+      }
+      updates.number = body.number;
+    }
+    if (body.callbackTime !== undefined) {
+      // Auto / manual schedule: always apply shift first, then token, then save. Order guaranteed.
+      let callbackTimeToSave = body.callbackTime as string;
+      const [profileRes, leavesRes] = await Promise.all([
+        supabase.from("profiles").select("shift_start_time, shift_end_time, week_off_days").eq("id", user.id).single(),
+        supabase.from("user_leaves").select("leave_date").eq("user_id", user.id),
+      ]);
+      const profile = profileRes.data as { shift_start_time?: string | null; shift_end_time?: string | null; week_off_days?: string | null } | null;
+      const leaves = (leavesRes.data ?? []) as { leave_date: string }[];
+      const leaveDates = leaves.map((r) => r.leave_date);
+      // 1. Shift: adjust to shift window, week-off, leave, overnight (e.g. 22:00–04:00)
+      if (profile?.shift_start_time != null && profile?.shift_end_time != null) {
+        callbackTimeToSave = adjustCallbackTimeToShift({
+          requestedCallbackTimeISO: callbackTimeToSave,
+          shiftStart: profile.shift_start_time,
+          shiftEnd: profile.shift_end_time,
+          weekOffDays: profile.week_off_days ?? null,
+          leaveDates,
+        });
+      }
+      // 2. Token: resolve 5-min slot and token per user per date
+      const { callbackTime: resolvedTime, token: resolvedToken } = await resolveSlotAndToken({
+        assignedTo: userEmail,
+        proposedCallbackTimeISO: callbackTimeToSave,
+        excludeLeadId: id,
+        supabase,
+      });
+      updates.callbackTime = resolvedTime;
+      updates.token = resolvedToken;
+    }
     if (body.whatsappFollowupStartedAt !== undefined)
       updates.whatsappFollowupStartedAt = body.whatsappFollowupStartedAt;
 
@@ -224,7 +293,11 @@ export async function PATCH(request: Request) {
       ? " Run: ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_document_received boolean DEFAULT false;"
       : /is_in_review|column.*does not exist/i.test(msg)
         ? " Run: ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_in_review boolean DEFAULT false;"
-        : "";
+        : /is_new_assigned|column.*does not exist/i.test(msg)
+          ? " Run: ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS is_new_assigned boolean DEFAULT false;"
+          : /token|column.*does not exist/i.test(msg)
+            ? " Run migration: 010_leads_token.sql (ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS token text;)"
+            : "";
     return NextResponse.json(
       { error: msg + hint },
       { status: 500 }

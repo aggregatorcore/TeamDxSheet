@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import type { Lead, TagOption } from "@/types/lead";
 import { TAGS_FOR_NOT_CONNECTED, TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
 import { getDisplayId } from "@/lib/displayId";
-import { appendTagHistory, getNextAttempt } from "@/lib/leadNote";
+import { appendTagHistory, canScheduleMoreHolds, getAutoScheduleHoursForAttempt, getNextAttempt } from "@/lib/leadNote";
 import { localDateTimeToISO } from "@/lib/dateUtils";
 import { useAppTimezone } from "@/components/AppTimezoneProvider";
-import { ACTION_NOTE_PREFIX, INTERESTED_ACTIONS, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
+import { ACTION_NOTE_PREFIX, FLOW_DISPLAY_LABELS, INTERESTED_ACTIONS, SCHEDULE_CALLBACK_LABEL } from "@/lib/constants";
+import { FlowIcon } from "./TagIcons";
 import { NotInterestedFormContent, type NotInterestedResult } from "./NotInterestedFormContent";
 
 const QUICK_PRESETS = [
@@ -83,6 +84,8 @@ export function CallDialModal({
   const [showInterestedSubChoice, setShowInterestedSubChoice] = useState(false);
   /** Selected sub-flow in Interested section; applied only on "Apply now" click */
   const [selectedInterestedAction, setSelectedInterestedAction] = useState<string | null>(null);
+  /** Selected reason tag on "Why didn't it connect?" – action runs only on Apply click */
+  const [selectedReasonTag, setSelectedReasonTag] = useState<TagOption | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -115,22 +118,36 @@ export function CallDialModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const handleConnect = async () => {
-    setLoading(true);
+  // Auto-schedule default: No Answer, Switch Off, Busy IVR – attempt 1 = 2h, 2 = 8h, 3 = 12h (shift logic applied on save)
+  useEffect(() => {
+    if (step !== "schedule" || !tag) return;
+    if (!TAGS_SCHEDULEABLE_CALLBACK.includes(tag)) return;
+    const attempt = getNextAttempt(lead.note, tag);
+    const hours = getAutoScheduleHoursForAttempt(attempt);
+    if (hours != null) {
+      const d = new Date(Date.now() + hours * 60 * 60 * 1000);
+      setDate(formatDateForInput(d));
+      setTime(formatTimeForInput(d));
+    }
+  }, [step, tag, lead.note]);
+
+  const handleConnect = () => {
     setError(null);
-    const res = await fetch("/api/leads", {
+    setStep("connected");
+    fetch("/api/leads", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: lead.id, flow: "Connected", tags: "" }),
+    }).then((res) => {
+      if (res.ok) {
+        onSuccess();
+      } else {
+        res.json().catch(() => ({})).then((data) => {
+          setError(data?.error || "Failed");
+          setStep("connect");
+        });
+      }
     });
-    setLoading(false);
-    if (res.ok) {
-      onSuccess();
-      setStep("connected");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error || "Failed");
-    }
   };
 
   const handleConnectedChoice = (choice: "Interested" | "Not Interested") => {
@@ -231,6 +248,48 @@ export function CallDialModal({
 
     const canSchedule = TAGS_SCHEDULEABLE_CALLBACK.includes(selectedTag);
     if (canSchedule) {
+      const attempt = getNextAttempt(lead.note, selectedTag);
+      const autoHours = getAutoScheduleHoursForAttempt(attempt);
+      const useAutoSchedule = canScheduleMoreHolds(lead.note, selectedTag) && autoHours != null;
+      if (useAutoSchedule) {
+        setLoading(true);
+        setError(null);
+        // Proposed time (e.g. now+2h); API will apply shift then token, then save
+        const callbackTime = new Date(Date.now() + autoHours * 60 * 60 * 1000).toISOString();
+        const attemptNum = attempt;
+        const attemptNote = `Attempt ${attemptNum}: ${selectedTag}`;
+        const noteWithTagHistory = appendTagHistory(lead.note, selectedTag);
+        const noteWithAttempt = noteWithTagHistory ? `${noteWithTagHistory} | ${attemptNote}` : attemptNote;
+        const callbackDateStr = new Date(callbackTime).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" });
+        const actionNote = `${ACTION_NOTE_PREFIX}Callback scheduled for ${callbackDateStr}`;
+        const newNote = noteWithAttempt ? `${noteWithAttempt} | ${actionNote}` : actionNote;
+        try {
+          const res = await fetch("/api/leads", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: lead.id,
+              flow: "Not Connected",
+              tags: selectedTag,
+              note: newNote,
+              callbackTime,
+              category: "callback",
+            }),
+          });
+          setLoading(false);
+          if (res.ok) {
+            onSuccess();
+            onClose();
+          } else {
+            const data = await res.json().catch(() => ({}));
+            setError(data.error ?? "Failed");
+          }
+        } catch {
+          setLoading(false);
+          setError("Failed");
+        }
+        return;
+      }
       setTag(selectedTag);
       setError(null);
       setStep("schedule");
@@ -319,6 +378,7 @@ export function CallDialModal({
       setShowNotInterestedSubChoice(false);
       setStep("connect");
     } else if (step === "reason") {
+      setSelectedReasonTag(null);
       setStep("connect");
     } else if (step === "schedule") {
       setStep("reason");
@@ -438,16 +498,25 @@ export function CallDialModal({
                   type="button"
                   onClick={handleConnect}
                   disabled={loading}
-                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {loading ? "..." : "Connected"}
+                  {loading ? "..." : (
+                    <>
+                      <FlowIcon flow="Connected" className="h-5 w-5 shrink-0" />
+                      {FLOW_DISPLAY_LABELS.Connected}
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStep("reason")}
-                  className="flex-1 rounded-lg border border-amber-400 bg-amber-50 px-4 py-2.5 font-medium text-amber-900 hover:bg-amber-100"
+                  onClick={() => {
+                    setSelectedReasonTag(null);
+                    setStep("reason");
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-2.5 font-medium text-amber-900 hover:bg-amber-100"
                 >
-                  Not connected
+                  <FlowIcon flow="Not Connected" className="h-5 w-5 shrink-0" />
+                  {FLOW_DISPLAY_LABELS["Not Connected"]}
                 </button>
               </div>
               {error && (
@@ -537,7 +606,7 @@ export function CallDialModal({
             </>
           )}
 
-          {/* No Answer cycle: reason step. No Answer / Switch Off / Busy IVR (TAGS_SCHEDULEABLE_CALLBACK) → schedule step; else save. */}
+          {/* No Answer cycle: reason step. Select a tag then click Apply – action runs only on Apply. */}
           {step === "reason" && (
             <>
               <p className="mb-2 text-sm font-medium text-neutral-700">Why didn&apos;t it connect?</p>
@@ -547,15 +616,29 @@ export function CallDialModal({
                     key={t}
                     type="button"
                     disabled={loading}
-                    onClick={() => handleReasonSelect(t)}
-                    className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
+                    onClick={() => setSelectedReasonTag((prev) => (prev === t ? null : t))}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      selectedReasonTag === t
+                        ? "border-neutral-600 bg-neutral-200 text-neutral-900 ring-2 ring-neutral-400/50"
+                        : "border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50"
+                    }`}
                   >
                     {t}
                   </button>
                 ))}
               </div>
+              {selectedReasonTag && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleReasonSelect(selectedReasonTag)}
+                  className="mt-3 w-full rounded-lg bg-neutral-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-900 disabled:opacity-50"
+                >
+                  {loading ? "..." : "Apply"}
+                </button>
+              )}
               {error && (
-                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
               )}
             </>
           )}

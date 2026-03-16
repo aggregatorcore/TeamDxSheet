@@ -14,6 +14,7 @@ import { InterestedFollowupModal } from "./InterestedFollowupModal";
 import { GreenBucketAnimationOverlay } from "./GreenBucketAnimationOverlay";
 import { ExhaustAnimationOverlay } from "./ExhaustAnimationOverlay";
 import { ReviewAnimationOverlay } from "./ReviewAnimationOverlay";
+import { NewAssignedAnimationOverlay } from "./NewAssignedAnimationOverlay";
 import { CallbackCountdown } from "./CallbackCountdown";
 import { TagIcon } from "./TagIcons";
 import { LeadDetailModal } from "./LeadDetailModal";
@@ -25,8 +26,8 @@ import { useCurrentTime } from "@/hooks/useCurrentTime";
 import { useCountdown } from "@/hooks/useCountdown";
 import { ACTION_LABELS, ACTION_NOTE_PREFIX, BLINK_BEFORE_SECONDS, CALL_NOW_LABEL, GRACE_PERIOD_HOURS, INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR, NO_PASSPORT_SCRIPT, SUBFLOW_TEXT_COLORS, TAG_TEXT_COLORS, WHATSAPP_FOLLOWUP_HOURS } from "@/lib/constants";
 import { getDisplayId } from "@/lib/displayId";
-import { formatCallbackDateShort } from "@/lib/dateUtils";
-import { appendTagHistory, getDisplayAttemptForTag, getEffectiveTag, getTagHistory, getInterestedSubFlow, getLastAttemptForTag, getWhatsAppSubFlow } from "@/lib/leadNote";
+import { formatCallbackDateShort, formatTokenDisplay } from "@/lib/dateUtils";
+import { appendTagHistory, getCallbackDisplayTagFallback, getDisplayAttemptForTag, getEffectiveTag, getTagHistory, getInterestedSubFlow, getLastAttemptForTag, getWhatsAppSubFlow } from "@/lib/leadNote";
 
 /** Single source of truth for callback flow. Uses getEffectiveTag so Incoming Off (from tags or note) is never treated as No Answer callback. Use this only — do not add new branches that check lead.tags for Incoming Off. */
 function getCallbackFlowType(lead: Lead): "whatsapp_followup" | "no_answer_callback" | "other_callback" | null {
@@ -125,6 +126,9 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   const [reviewingLead, setReviewingLead] = useState<Lead | null>(null);
   const [reviewRect, setReviewRect] = useState<DOMRect | null>(null);
   const [reviewPhase, setReviewPhase] = useState<"move" | "slide">("move");
+  const [newAssignedLead, setNewAssignedLead] = useState<Lead | null>(null);
+  const [newAssignedRect, setNewAssignedRect] = useState<DOMRect | null>(null);
+  const [newAssignedPhase, setNewAssignedPhase] = useState<"move" | "slide">("move");
   const [, setUpdating] = useState<string | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const [noteEditLead, setNoteEditLead] = useState<Lead | null>(null);
@@ -150,6 +154,10 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
 
   const handleGreenBucketMoveComplete = useCallback(() => {
     setGreenBucketPhase("slide");
+  }, []);
+
+  const handleNewAssignedMoveComplete = useCallback(() => {
+    setNewAssignedPhase("slide");
   }, []);
 
   useEffect(() => {
@@ -189,6 +197,17 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     }, 1200);
     return () => clearTimeout(t);
   }, [greenBucketPhase, onRefresh, router, onGreenBucketComplete]);
+
+  useEffect(() => {
+    if (newAssignedPhase !== "slide") return;
+    const t = setTimeout(() => {
+      setNewAssignedLead(null);
+      setNewAssignedRect(null);
+      setNewAssignedPhase("move");
+      onRefresh();
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [newAssignedPhase, onRefresh]);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const hasCallbacks = leads.some((l) => l.callbackTime);
@@ -341,6 +360,15 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
     }
   }, [greenBucketLead]);
 
+  useEffect(() => {
+    if (newAssignedLead) {
+      rowRefs.current[newAssignedLead.id]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [newAssignedLead]);
+
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const bodyTableRef = useRef<HTMLTableElement>(null);
 
@@ -381,7 +409,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
   }, [selectedCell, leads.length, openRowModal]);
 
   /* Column widths: ID, Source, Name, Place, Number, Flow/Tag/Action, Sub flow, Notes (manual edit icon). Flow column wider so callback time doesn’t clip. */
-  const colWidths = ["12%", "8%", "10%", "8%", "10%", "28%", "18%", "6%"];
+  const colWidths = ["9%", "6%", "10%", "8%", "10%", "33%", "18%", "6%"];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-lg">
@@ -405,7 +433,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           <thead>
             <tr>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap rounded-tl-lg border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">ID / Source</th>
-              <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Token</th>
+              <th className="sticky top-0 z-20 min-w-[4.5rem] overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]" title="Token">Token</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Name</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Place</th>
               <th className="sticky top-0 z-20 overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-600 border-b-2 border-slate-700 bg-slate-800 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-100 shadow-[0_1px_3px_0_rgba(0,0,0,0.12)]">Number</th>
@@ -426,6 +454,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             const isExhausting = exhaustingLead?.id === lead.id;
             const isReviewing = reviewingLead?.id === lead.id;
             const isGreenBucketing = greenBucketLead?.id === lead.id;
+            const isNewAssigned = newAssignedLead?.id === lead.id;
             const isCollaborationHighlight = highlightLeadId === lead.id;
             const exhaustRowClass = isExhausting
               ? exhaustPhase === "move"
@@ -441,6 +470,11 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               ? greenBucketPhase === "move"
                 ? "animate-green-blink"
                 : "animate-green-slide-out"
+              : null;
+            const newAssignedRowClass = isNewAssigned
+              ? newAssignedPhase === "move"
+                ? "animate-new-assigned-blink"
+                : "animate-new-assigned-slide-out"
               : null;
             const flowNorm = String(lead.flow ?? "").trim().toLowerCase();
             const tagsNorm = String(lead.tags ?? "").trim();
@@ -473,9 +507,11 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               lead.flow === "Not Connected" && effectiveTag === "Incoming Off";
             const resolvedDisplayTag =
               displayTag === "Incoming Off" && !showIncomingOffCollaborate ? "" : displayTag;
-            // Callback card (No Answer cycle): always show a tag — never blank (use lead.tags / effectiveTag fallback so tag is never missing)
+            // Callback card: always show a tag — never "—". Fallback from note when tags/effectiveTag empty (e.g. old data).
+            const callbackCardTagRaw =
+              resolvedDisplayTag || (lead.tags?.trim() ?? "") || effectiveTag || "";
             const callbackCardTag =
-              resolvedDisplayTag || (lead.tags?.trim() ?? "") || effectiveTag || "—";
+              callbackCardTagRaw || getCallbackDisplayTagFallback(lead.note);
             // Interested + sub-flow (action in note or legacy Document received) → we show the followup card; Document received is sub-flow not tag
             const interestedActionFromNote =
               lead.flow === "Connected" && (lead.tags === "Interested" || String(lead.tags) === "Document received")
@@ -497,7 +533,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
               className={`group scroll-mt-8 transition-colors duration-150 ${
                 isRowClickable ? "cursor-pointer " : ""
               }${
-                exhaustRowClass ?? reviewRowClass ?? greenBucketRowClass ??
+                exhaustRowClass ?? reviewRowClass ?? greenBucketRowClass ?? newAssignedRowClass ??
                   (isOverdue(lead)
                     ? "animate-overdue-blink hover:!bg-red-100"
                     : shouldBlink && isWhatsAppFollowupLead(lead)
@@ -553,7 +589,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                   </button>
                 </div>
               </td>
-              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 1 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 1 }); }}>{lead.token ?? ""}</td>
+              <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 1 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 1 }); }}>{formatTokenDisplay(lead)}</td>
               <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 2 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 2 }); }}>{lead.name}</td>
               <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 3 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 3 }); }}>{lead.place}</td>
               <td className={`overflow-hidden text-ellipsis whitespace-nowrap border-r-2 border-slate-200 px-2 py-1.5 text-xs text-slate-800 ${selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === 4 ? "ring-2 ring-blue-500 ring-inset" : ""} ${isCollaborationHighlight ? "bg-emerald-100/90" : ""}`} onClick={(e) => { e.stopPropagation(); if (expandedCollaborationLeadId) setExpandedCollaborationLeadId(null); setSelectedCell({ rowIndex, colIndex: 4 }); }}>
@@ -809,8 +845,15 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                       const action = interestedActionFromNote;
                       const isDefaultFollowupAction = action === INTERESTED_ACTION_DEFAULT_FOLLOWUP_1HR;
                       const showCountdown = lead.callbackTime || isDefaultFollowupAction;
+                      const interestedOverdue = isOverdue(lead);
+                      const interestedCardClass = interestedOverdue
+                        ? "relative inline-flex h-[30px] min-w-0 max-w-full flex-nowrap items-center gap-2 rounded-lg border border-red-200/80 bg-red-50/70 pl-4 pr-2 py-1 shadow-sm"
+                        : CALLBACK_CARD_AMBER_CLASS;
+                      const interestedDividerClass = interestedOverdue
+                        ? "self-stretch w-px min-h-[1.25rem] shrink-0 rounded-full bg-red-300"
+                        : CALLBACK_CARD_AMBER_DIVIDER_CLASS;
                       return action ? (
-                        <span className={CALLBACK_CARD_AMBER_CLASS}>
+                        <span className={interestedCardClass}>
                           {(() => { const attempt = getDisplayAttemptForTag(lead.note, "Interested", !!lead.callbackTime); return attempt >= ATTEMPT_BADGE_MIN && (
                             <span className={ATTEMPT_CORNER_BADGE_CLASS} title={`Attempt ${attempt}`}>{attempt}</span>
                           ); })()}
@@ -818,7 +861,7 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
                             <TagIcon tag="Interested" className="h-3 w-3 shrink-0" />
                             Interested
                           </span>
-                          <span className={CALLBACK_CARD_AMBER_DIVIDER_CLASS} aria-hidden />
+                          <span className={interestedDividerClass} aria-hidden />
                           {showCountdown &&
                             (lead.callbackTime ? (
                               <>
@@ -1064,6 +1107,15 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             setCallbackReminderLead(null);
             setCallNowLead(null);
             setInvalidLead(l);
+          }}
+          onMoveToNewAssigned={(lead) => {
+            setCallbackReminderFromOverdue(false);
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            const rect = rowRefs.current[lead.id]?.getBoundingClientRect() ?? null;
+            setNewAssignedLead(lead);
+            setNewAssignedRect(rect);
+            setNewAssignedPhase("move");
           }}
         />
       )}
@@ -1456,6 +1508,18 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
           }}
           rowRect={greenBucketRect}
           onComplete={handleGreenBucketMoveComplete}
+        />
+      )}
+      {newAssignedLead && newAssignedPhase === "move" && (
+        <NewAssignedAnimationOverlay
+          lead={{
+            id: newAssignedLead.id,
+            name: newAssignedLead.name,
+            number: newAssignedLead.number,
+            tags: newAssignedLead.tags,
+          }}
+          rowRect={newAssignedRect}
+          onComplete={handleNewAssignedMoveComplete}
         />
       )}
     </div>

@@ -1,4 +1,6 @@
-import { ACTION_NOTE_PREFIX, MANUAL_NOTE_PREFIX, SUBFLOW_NOTE_PREFIX } from "./constants";
+import { ACTION_NOTE_PREFIX, CALLBACK_AUTO_SCHEDULE_HOURS, MANUAL_NOTE_PREFIX, SUBFLOW_NOTE_PREFIX } from "./constants";
+import { TAGS_SCHEDULEABLE_CALLBACK } from "@/types/lead";
+import type { TagOption } from "@/types/lead";
 
 /**
  * Append tag to TagHistory in note. Format: "TagHistory: tag (date) | tag (date)"
@@ -64,6 +66,31 @@ export function getEffectiveTag(note: string | undefined, currentTags: string | 
 }
 
 /**
+ * Fallback tag for callback card when lead.tags and getEffectiveTag are empty (e.g. old data).
+ * Returns last tag from note that is in validCallbackTags, or "No Answer". Use so UI never shows "—".
+ */
+export function getCallbackDisplayTagFallback(
+  note: string | undefined,
+  validCallbackTags: readonly string[] = TAGS_SCHEDULEABLE_CALLBACK
+): string {
+  const effective = getEffectiveTag(note, undefined);
+  if (effective && validCallbackTags.includes(effective)) return effective;
+  const tagHistory = getTagHistory(note);
+  for (let i = tagHistory.length - 1; i >= 0; i--) {
+    const entry = tagHistory[i];
+    const m = entry.match(/^(.+?)\s*\([^)]+\)$/);
+    const tag = m ? m[1].trim() : entry.trim();
+    if (tag && validCallbackTags.includes(tag)) return tag;
+  }
+  const attemptParts = note?.split(" | ").filter((p) => /^Attempt\s+\d+:\s*.+/.test(p.trim())) ?? [];
+  for (let i = attemptParts.length - 1; i >= 0; i--) {
+    const tag = attemptParts[i].replace(/^Attempt\s+\d+:\s*/, "").trim();
+    if (tag && validCallbackTags.includes(tag)) return tag;
+  }
+  return "No Answer";
+}
+
+/**
  * Extract manual note (user-written) from lead.note. Used in NoteEditModal.
  * TagHistory, Attempt, Action parts are system-generated and not shown here.
  */
@@ -98,6 +125,31 @@ export function getWhatsAppSubFlow(note: string | undefined): string {
   if (!subFlowPart) return "";
   const prefix = subFlowPart.startsWith(SUBFLOW_NOTE_PREFIX) ? SUBFLOW_NOTE_PREFIX : LEGACY_SUBFLOW_NOTE_PREFIX;
   return subFlowPart.slice(prefix.length).trim();
+}
+
+/** Max hold attempts for callback tags (No Answer, Switch Off, Busy IVR). After this, New Assigned gate opens. */
+export const MAX_HOLD_ATTEMPTS_NO_ANSWER = 3;
+
+/**
+ * Auto-schedule hours for attempt 1, 2, 3 (No Answer, Switch Off, Busy IVR). Global rule: attempt 1 = 2h, 2 = 8h, 3 = 12h.
+ * Returns null if attempt is not 1–3 (e.g. manual only or out of range).
+ */
+export function getAutoScheduleHoursForAttempt(attempt: number): number | null {
+  if (attempt >= 1 && attempt <= CALLBACK_AUTO_SCHEDULE_HOURS.length) {
+    return CALLBACK_AUTO_SCHEDULE_HOURS[attempt - 1] ?? null;
+  }
+  return null;
+}
+
+/**
+ * Whether one more schedule (hold) is allowed for this tag. False when next attempt would exceed hold limit (e.g. 4th hold for No Answer).
+ * Used in CallbackReminderModal to show "Move to New Assigned" instead of schedule form.
+ */
+export function canScheduleMoreHolds(note: string | undefined, tag: string): boolean {
+  const tagNorm = String(tag ?? "").trim();
+  if (!tagNorm || !TAGS_SCHEDULEABLE_CALLBACK.includes(tagNorm as TagOption)) return true;
+  const next = getNextAttempt(note, tagNorm);
+  return next <= MAX_HOLD_ATTEMPTS_NO_ANSWER;
 }
 
 /**

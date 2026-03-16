@@ -53,6 +53,7 @@ export const TAG_OPTIONS: TagOption[] = [
 /** Sub-flows under tag "WhatsApp Flow Active". Not standalone tags. */
 export const WHATSAPP_SUB_FLOWS: WhatsAppSubFlow[] = ["WhatsApp Not Available", "WhatsApp No Reply"];
 
+/** Not Connected: 5 tags = 4 cycles + 1 terminal. Do not confuse: cycle = tag se start to end tak complete flow. */
 export const TAGS_FOR_NOT_CONNECTED: TagOption[] = [
   "No Answer",
   "Switch Off",
@@ -61,9 +62,17 @@ export const TAGS_FOR_NOT_CONNECTED: TagOption[] = [
   "Invalid Number",
 ];
 
+/** Not Connected cycles (4): No Answer | Switch Off | Busy IVR | Incoming Off. Each tag = one cycle (start to end flow). */
+export const NOT_CONNECTED_CYCLE_TAGS: TagOption[] = ["No Answer", "Switch Off", "Busy IVR", "Incoming Off"];
+
+/** Not Connected terminal (1): Invalid Number. Reason = invalid number; no cycle, no callback. */
+export const NOT_CONNECTED_TERMINAL_TAG: TagOption = "Invalid Number";
+
+/** Terminal (global rule): Sirf exhaust = terminal. Review terminal nahi (review = junction/hide for senior; back/forward ya exhaust). E.g. Invalid Number, WhatsApp Not Available → exhaust. */
+
 export const TAGS_FOR_CONNECTED: TagOption[] = ["Not Interested", "Interested"];
 
-/** Tags that allow scheduling a callback (No Answer cycle – Not Connected sub-set). Global: use for schedule step. */
+/** Tags that allow scheduling a callback (No Answer cycle – Not Connected sub-set). Global: use for schedule step. Hold limit: max 3 attempts per cycle; 4th → New Assigned gate (see leadNote.MAX_HOLD_ATTEMPTS_NO_ANSWER, canScheduleMoreHolds). */
 export const TAGS_SCHEDULEABLE_CALLBACK: TagOption[] = ["No Answer", "Switch Off", "Busy IVR"];
 
 /** When lead has tag "WhatsApp Flow Active", sub-flow stored in note (SubFlow: WhatsApp No Reply) or legacy tags "Incoming Off" + whatsappFollowupStartedAt. */

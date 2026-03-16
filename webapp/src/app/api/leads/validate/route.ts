@@ -1,19 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { normalizeLeadNumber } from "@/lib/leadNumber";
 import { NextResponse } from "next/server";
 
 async function isAdmin(userId: string): Promise<boolean> {
   const supabase = await createClient();
   const { data } = await supabase.from("profiles").select("role").eq("id", userId).single();
   return data?.role === "admin";
-}
-
-/** Normalize number for comparison - remove spaces, take first if comma-separated */
-function normalizeNumber(n: string): string {
-  return String(n ?? "")
-    .replace(/\s/g, "")
-    .split(",")[0]
-    .trim();
 }
 
 export async function POST(request: Request) {
@@ -38,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No numbers provided" }, { status: 400 });
     }
 
-    const normalized = numbers.map(normalizeNumber).filter(Boolean);
+    const normalized = numbers.map(normalizeLeadNumber).filter(Boolean);
     const unique = [...new Set(normalized)];
 
     if (unique.length === 0) {
@@ -61,7 +54,7 @@ export async function POST(request: Request) {
     const byNumber = new Map<string, { number: string; assignedTo: string }>();
     for (const r of rows ?? []) {
       const raw = String(r.number ?? "").trim();
-      const norm = normalizeNumber(raw);
+      const norm = normalizeLeadNumber(raw);
       if (norm && !byNumber.has(norm)) {
         byNumber.set(norm, { number: norm, assignedTo: String(r.assigned_to ?? "—") });
       }
