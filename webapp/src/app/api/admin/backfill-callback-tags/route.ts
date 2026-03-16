@@ -10,7 +10,7 @@ async function isAdmin(userId: string): Promise<boolean> {
   return data?.role === "admin";
 }
 
-const VALID_CALLBACK_TAGS = new Set(TAGS_SCHEDULEABLE_CALLBACK);
+const VALID_CALLBACK_TAGS = new Set<string>(TAGS_SCHEDULEABLE_CALLBACK);
 
 /**
  * POST /api/admin/backfill-callback-tags
