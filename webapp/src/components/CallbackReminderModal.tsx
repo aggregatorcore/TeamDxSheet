@@ -48,6 +48,8 @@ export interface CallbackReminderModalProps {
   onInvalidNumber?: (lead: Lead) => void;
   /** When lead is moved to New Assigned (hold limit); parent shows animation and refreshes after. If provided, onSuccess is not called so refresh happens after animation. */
   onMoveToNewAssigned?: (lead: Lead) => void;
+  /** When user selects Incoming Off – open WhatsApp modal (same as CallDial). If not provided, Incoming Off is applied without opening WhatsApp. */
+  onIncomingOffClick?: (lead: Lead) => void;
 }
 
 type Step = "reminder" | "callNow" | "result" | "connected" | "not_connect" | "schedule";
@@ -61,6 +63,7 @@ export function CallbackReminderModal({
   onConnectNotInterested,
   onInvalidNumber,
   onMoveToNewAssigned,
+  onIncomingOffClick,
 }: CallbackReminderModalProps) {
   const countdown = useCountdown(lead.callbackTime || null);
   const [step, setStep] = useState<Step>(
@@ -149,6 +152,13 @@ export function CallbackReminderModal({
   };
 
   const handleNotConnectTagClick = async (t: TagOption) => {
+    if (t === "Incoming Off") {
+      if (onIncomingOffClick) {
+        onIncomingOffClick(lead);
+      }
+      onClose();
+      return;
+    }
     if (t === "Invalid Number") {
       if (onInvalidNumber) {
         onInvalidNumber(lead);

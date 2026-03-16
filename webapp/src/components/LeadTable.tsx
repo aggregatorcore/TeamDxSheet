@@ -1117,6 +1117,13 @@ export function LeadTable({ leads, onRefresh, onLeadUpdate, onGreenBucketComplet
             setNewAssignedRect(rect);
             setNewAssignedPhase("move");
           }}
+          onIncomingOffClick={(lead) => {
+            setCallbackReminderFromOverdue(false);
+            setCallbackReminderLead(null);
+            setCallNowLead(null);
+            setWhatsappOpenedFromCallDialIncomingOff(true);
+            setWhatsappLead(lead);
+          }}
         />
       )}
       {overdueCallLead && (
